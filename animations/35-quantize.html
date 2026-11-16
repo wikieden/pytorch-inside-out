@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>量化的尺子</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 35 章 · 量化的尺子</h1>
+<p class="sub">配套讲义：<a href="../lessons/35-quant-export.html">第 35 章 · 量化与导出：模型变小、脱离 Python 部署</a>。16 个权重（编的），第 13 个是离群值 3.0。对称量化：s = 组内最大绝对值 ÷ (2^(b−1) − 1)。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><label>位数 b</label><input type="range" id="bb" min="2" max="8" value="8"><span id="bbv">8</span><label>分组大小</label><select id="gg"><option value="16">16（整组一个 s）</option><option value="8">8</option><option value="4">4</option></select></div>
+<p class="note">看点：① 每根柱是一个权重，细线是还原值，红色是误差；② 位数从 8 降到 4、2，误差变大；③ 分组后离群值只拖累自己那组，其他组的 s 变小、误差下降。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const W=[0.21,-0.35,0.48,-0.12,0.05,0.33,-0.41,0.27,-0.19,0.44,-0.08,0.15,3.0,-0.26,0.38,-0.31];
+let B=8,G=16,k=0,auto=true;
+function quant(){
+  const out=[],S=[];const qmax=2**(B-1)-1;
+  for(let g=0;g<W.length;g+=G){const grp=W.slice(g,g+G);const s=Math.max(...grp.map(Math.abs))/qmax;S.push(s);grp.forEach(w=>out.push(Math.round(w/s)*s))}
+  return {out,S};
+}
+function draw(){
+  clear(sv);
+  const {out,S}=quant(),err=W.map((w,i)=>Math.abs(w-out[i]));
+  const mse=err.reduce((a,e)=>a+e*e,0)/W.length;
+  const mean=err.reduce((a,b)=>a+b,0)/W.length;
+  txt(`${B} 位，每 ${G} 个一组：平均误差 ${mean.toFixed(4)}`,{x:340,y:26,'text-anchor':'middle',class:'cap'},sv);
+  const X=i=>50+i*37,Y=v=>200-v*55;
+  el('line',{x1:40,y1:Y(0),x2:650,y2:Y(0),stroke:'var(--line)'},sv);
+  for(let g=0;g<W.length;g+=G){el('rect',{x:X(g)-6,y:40,width:G*37-2,height:250,fill:(g/G)%2?'var(--card)':'none',opacity:.6},sv);txt(`s = ${S[g/G].toFixed(4)}`,{x:X(g),y:302,class:'m'},sv)}
+  W.forEach((w,i)=>{
+    const show=i<k;
+    el('rect',{x:X(i),y:Math.min(Y(w),Y(0)),width:22,height:Math.abs(Y(w)-Y(0)),fill:'var(--accent)',opacity:.55},sv);
+    if(show){
+      el('line',{x1:X(i)-3,y1:Y(out[i]),x2:X(i)+25,y2:Y(out[i]),stroke:'var(--text)','stroke-width':2},sv);
+      if(err[i]>0.005)el('rect',{x:X(i)+22,y:Math.min(Y(w),Y(out[i])),width:5,height:Math.max(Math.abs(Y(w)-Y(out[i])),1),fill:'var(--bad)'},sv);
+    }
+  });
+  txt('蓝柱 = 原权重　黑线 = 还原值　红条 = 误差（离群值 3.0 超出画面上沿）',{x:50,y:330,class:'m'},sv);
+  txt(`均方误差 ${mse.toExponential(2)}`,{x:50,y:356,class:'big'},sv);
+  $('bbv').textContent=B;
+}
+const SEQ=[[8,16],[4,16],[4,4]];let si=0;
+function reset(){k=0;if(auto){si=0;[B,G]=SEQ[0];$('gg').value=G}draw()}
+function next(){if(k<W.length){k+=2;draw();return true}if(auto&&si<SEQ.length-1){si++;[B,G]=SEQ[si];$('gg').value=G;k=W.length;draw();return true}return false}
+$('bb').oninput=e=>{ANIM.stop();auto=false;B=+e.target.value;k=W.length;draw()};
+$('gg').onchange=e=>{ANIM.stop();auto=false;G=+e.target.value;k=W.length;draw()};
+setupPlayer({captureSeed:1,reset,next},700);
+</script></body></html>

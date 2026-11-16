@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>benchmark 与容差</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}</style></head>
+<body><main>
+<h1>第 36 章 · 测量的分布与容差带</h1>
+<p class="sub">配套讲义：<a href="../lessons/36-bench-correctness.html">第 36 章 · benchmark 与正确性：测准、对齐、再上线</a>。计时点按本机实测的范围生成（首次 2.43 ms，之后 0.37–0.65 ms；1 线程中位数约 0.70 ms），容差按 assert_close 默认值。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><button id="mt">计时分布</button><button id="mc">容差带</button><button id="th"></button></div>
+<div class="row ctl"><label>新 kernel 的输出</label><input type="range" id="vv" min="-400" max="400" value="120"><span id="vvv"></span></div>
+<p class="note">看点：① 第 1 次测量远在右边（没热身），不能算进去；② 中位数线和 IQR 框比平均值稳；③ 切到 1 线程，整团点右移；④ 容差带：同样的偏差，fp32 失败、bf16 通过。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let mode='t',k=0,one=false,V=1.012,auto=true;
+let pts=[];
+function gen(){seed(7);pts=[2.43];for(let i=0;i<30;i++){let v=0.42+Math.abs(gauss())*0.06-0.03;if(rnd()<0.1)v+=0.15;pts.push(Math.min(0.65,Math.max(0.37,v)))}}
+gen();
+function draw(){
+  clear(sv);$('mt').classList.toggle('on',mode==='t');$('mc').classList.toggle('on',mode==='c');
+  if(mode==='t'){
+    const scale=one?0.70/0.42:1,P=pts.map((p,i)=>i===0?p:p*scale);
+    txt(one?'Timer 默认 1 线程：整体变慢':'自己掐表，6 线程',{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+    const X=v=>60+v/2.6*590;
+    el('line',{x1:60,y1:220,x2:650,y2:220,stroke:'var(--line)'},sv);
+    [0,0.5,1,1.5,2,2.5].forEach(v=>txt(v+' ms',{x:X(v),y:240,'text-anchor':'middle',class:'m'},sv));
+    const n=Math.min(k*4,P.length);
+    P.slice(0,n).forEach((p,i)=>el('circle',{cx:X(p),cy:200-(i%8)*14,r:5,fill:i===0?'var(--bad)':'var(--accent)',opacity:.8},sv));
+    if(n>0)txt('第 1 次（没热身）',{x:X(P[0]),y:100,'text-anchor':'middle',class:'m'},sv).style.fill='var(--bad)';
+    if(n>=P.length){
+      const s=P.slice(1).sort((a,b)=>a-b),med=s[15],q1=s[7],q3=s[22],mean=P.reduce((a,b)=>a+b,0)/P.length;
+      el('rect',{x:X(q1),y:90,width:X(q3)-X(q1),height:120,fill:'var(--teal)',opacity:.15,stroke:'var(--teal)'},sv);
+      el('line',{x1:X(med),y1:85,x2:X(med),y2:215,stroke:'var(--teal)','stroke-width':2},sv);
+      el('line',{x1:X(mean),y1:85,x2:X(mean),y2:215,stroke:'var(--warm)','stroke-width':2,'stroke-dasharray':'4 3'},sv);
+      txt(`中位数（去掉第 1 次）${med.toFixed(2)} ms　IQR ${q1.toFixed(2)}–${q3.toFixed(2)}`,{x:60,y:280,class:'big'},sv).style.fill='var(--teal)';
+      txt(`平均值（含第 1 次）${mean.toFixed(2)} ms：被第 1 次拉高`,{x:60,y:306,class:'big'},sv).style.fill='var(--warm)';
+      txt(`有效带宽 = 50.3 MB ÷ ${med.toFixed(2)} ms ≈ ${(50.3/med).toFixed(0)} GB/s`,{x:60,y:340,class:'code'},sv);
+    }
+  }else{
+    txt('assert_close：|a − b| ≤ atol + rtol × |b|，参考值 b = 1.0',{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+    const X=v=>340+(v-1)*12000;
+    el('line',{x1:40,y1:200,x2:640,y2:200,stroke:'var(--line)'},sv);
+    const bands=[['bfloat16',1.6e-2,1e-5,'var(--teal)',80],['float32',1.3e-6,1e-5,'var(--accent)',140]];
+    bands.forEach(([n,r,a,c,y])=>{
+      const tol=a+r*1;const x0=Math.max(40,X(1-tol)),x1=Math.min(640,X(1+tol));
+      el('rect',{x:x0,y,width:Math.max(x1-x0,2),height:40,fill:c,opacity:.25,stroke:c},sv);
+      const ok=Math.abs(V-1)<=tol;
+      txt(`${n}：容差 ±${tol.toExponential(1)} → ${ok?'通过':'失败'}`,{x:44,y:y-6,class:'big'},sv).style.fill=ok?'var(--good)':'var(--bad)';
+    });
+    el('line',{x1:X(1),y1:60,x2:X(1),y2:220,stroke:'var(--text)'},sv);txt('b = 1.0',{x:X(1),y:240,'text-anchor':'middle',class:'m'},sv);
+    const xv=Math.max(40,Math.min(640,X(V)));
+    el('circle',{cx:xv,cy:200,r:7,fill:'var(--warm)'},sv);
+    txt(`a = ${V.toFixed(5)}（偏差 ${(V-1).toExponential(2)}）`,{x:xv,y:270,'text-anchor':'middle',class:'code'},sv).style.fill='var(--warm)';
+    txt('bf16 的容差是 fp32 的一万倍：对应 bf16 在 1 附近间隔 0.0078（第 26 章）',{x:40,y:330,class:'m'},sv);
+  }
+  $('th').textContent='线程：'+(one?'1（Timer 默认）':'6');$('vvv').textContent=V.toFixed(4);
+}
+function reset(){k=0;if(auto){mode='t';one=false}draw()}
+function next(){if(mode==='t'&&k*4<pts.length){k++;draw();return true}if(auto&&mode==='t'&&!one){one=true;draw();return true}if(auto&&mode==='t'){mode='c';V=1.012;draw();return true}if(auto&&mode==='c'&&V>1.0000065){V=1.000005;draw();return true}return false}
+$('mt').onclick=()=>{ANIM.stop();auto=false;mode='t';k=99;draw()};
+$('mc').onclick=()=>{ANIM.stop();auto=false;mode='c';draw()};
+$('th').onclick=()=>{ANIM.stop();auto=false;one=!one;k=99;draw()};
+$('vv').oninput=e=>{ANIM.stop();auto=false;mode='c';V=1+(+e.target.value)/10000*Math.abs(+e.target.value)/400;draw()};
+setupPlayer({captureSeed:1,reset,next},900);
+</script></body></html>

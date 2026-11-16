@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TORCH_LIBRARY 登记</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:13px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}</style></head>
+<body><main>
+<h1>第 34 章 · 一个 C++ 算子怎么接进分派表</h1>
+<p class="sub">配套讲义：<a href="../lessons/34-cpp-extension.html">第 34 章 · C++ / CUDA 扩展：TORCH_LIBRARY 把 C++ 函数登记进分派表</a>。表格是第 3 章的"算子 × 标签"大表（只画几行几列）。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<p class="note">看点：① TORCH_LIBRARY 加一行，各列空着；② TORCH_LIBRARY_IMPL(myext, CPU) 填 CPU 列；③ Python 的 register_fake 填 Meta 列、register_autograd 填 Autograd 列；④ 调用时沿这一行走标签梯子。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const COLS=['Autograd','CPU','CUDA','Meta（fake）'];
+const ROWS=[['aten::mm','记 MmBackward0','CPU 矩阵乘','cuBLAS','算形状'],['aten::add','记 AddBackward0','CPU 加法','CUDA kernel','算形状']];
+const CAPS=['分派表原来的样子','TORCH_LIBRARY(myext)：m.def("add_relu(Tensor x, Tensor y) -> Tensor") 加一行','TORCH_LIBRARY_IMPL(myext, CPU)：CPU 列填 add_relu_cpu','Python：register_fake 填 Meta 列（compile / export 用）','Python：register_autograd 填 Autograd 列（训练用）','调用 torch.ops.myext.add_relu(x, y)：先 Autograd 记账，再进 CPU 实现'];
+let k=0;
+function draw(){
+  clear(sv);
+  txt(CAPS[k],{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  const x0=20,w0=120,cw=130,rh=40,y0=60;
+  txt('算子 \\ 标签',{x:x0+6,y:y0+24,class:'m'},sv);
+  COLS.forEach((c,j)=>txt(c,{x:x0+w0+j*cw+cw/2,y:y0+24,'text-anchor':'middle',class:'big'},sv));
+  const rows=[...ROWS];
+  if(k>=1)rows.push(['myext::add_relu',k>=4?'GeneratedBackward…':'',k>=2?'add_relu_cpu':'','',k>=3?'fake：empty_like':'']);
+  rows.forEach((r,i)=>{
+    const y=y0+rh*(i+1),isNew=i===2;
+    el('rect',{x:x0,y,width:w0+cw*4,height:rh-4,rx:6,fill:isNew?'var(--accent-bg)':'var(--bg)',stroke:isNew?'var(--accent)':'var(--line)'},sv);
+    txt(r[0],{x:x0+8,y:y+23,class:'code'},sv);
+    for(let j=1;j<=4;j++){
+      const cx=x0+w0+(j-1)*cw;
+      const fresh=isNew&&((j===2&&k===2)||(j===4&&k===3)||(j===1&&k===4));
+      if(isNew&&r[j]==='')el('rect',{x:cx+6,y:y+6,width:cw-12,height:rh-16,rx:4,fill:'none',stroke:'var(--line)','stroke-dasharray':'3 3'},sv);
+      const t=txt(r[j]||(isNew?'（空）':''),{x:cx+cw/2,y:y+23,'text-anchor':'middle',class:'code'},sv);
+      if(fresh)t.style.fill='var(--warm)';else if(isNew&&!r[j])t.style.fill='var(--muted)';
+    }
+  });
+  if(k>=5){
+    const y=y0+rh*3+18;
+    const steps=['Autograd 列：记一笔 GeneratedBackwardFor_myext_add_relu','CPU 列：调 add_relu_cpu → [0, 0, 4]'];
+    steps.forEach((s,i)=>txt(`${i+1}. ${s}`,{x:x0+10,y:y+70+i*24,class:'code'},sv).style.fill='var(--teal)');
+    txt('（和第 3 章 aten::mm 走的是同一条标签梯子）',{x:x0+10,y:y+122,class:'m'},sv);
+  }
+}
+function reset(){k=0;draw()}
+function next(){if(k>=5)return false;k++;draw();return true}
+setupPlayer({captureSeed:1,reset,next},1500);
+</script></body></html>
