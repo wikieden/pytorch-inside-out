@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DataLoader worker</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 8 章 · worker 数和 GPU 空等</h1>
+<p class="sub">配套讲义：<a href="../lessons/08-dataloader.html">第 8 章 · Dataset 与 DataLoader：给 GPU 备菜的流水线</a>。读一批要 t_d 毫秒（CPU），训一步要 25 毫秒（GPU）。画 8 步训练。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><label>num_workers</label><input type="range" id="nw" min="0" max="3" step="1" value="0"><span id="nwv">0</span></div>
+<div class="row ctl"><label>读一批 t_d（ms）</label><input type="range" id="td" min="10" max="90" step="5" value="40"><span id="tdv">40</span></div>
+<p class="note">看点：① num_workers = 0 时主进程自己备菜，备一批训一步，排成一条线；② 加 worker 后备菜并行，GPU 方块逐渐首尾相接；③ worker 数 ≥ t_d ÷ 25 时 GPU 不再等。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const NWS=[0,1,2,4];
+let nwi=0,TD=40,k=0;const TS=25,STEPS=8;
+function sim(nw,td){
+  const loads=[],train=[];
+  if(nw===0){let t=0;for(let s=0;s<STEPS;s++){loads.push({w:0,t0:t,t1:t+td,s});t+=td;train.push({t0:t,t1:t+TS,s});t+=TS}}
+  else{
+    const free=Array(nw).fill(0);const ready=[];
+    for(let s=0;s<STEPS;s++){let w=s%nw;const t0=free[w];loads.push({w,t0,t1:t0+td,s});free[w]=t0+td;ready.push(t0+td)}
+    let g=0;for(let s=0;s<STEPS;s++){const t0=Math.max(g,ready[s]);train.push({t0,t1:t0+TS,s});g=t0+TS}
+  }
+  const end=train[STEPS-1].t1;return {loads,train,end,busy:STEPS*TS/end};
+}
+function draw(){
+  clear(sv);
+  const nw=NWS[nwi],S=sim(nw,TD),T=sim(0,90).end;
+  const X=t=>110+t/T*550;
+  const rows=Math.max(nw,1);
+  txt(nw===0?'num_workers = 0：主进程自己读，读完才能训':`num_workers = ${nw}：${nw} 个子进程并行备菜`,{x:340,y:26,'text-anchor':'middle',class:'cap'},sv);
+  for(let w=0;w<rows;w++){
+    const y=56+w*44;
+    txt(nw===0?'主进程读':`worker ${w}`,{x:20,y:y+24,class:'m'},sv);
+    S.loads.filter(b=>b.w===w&&b.s<k).forEach(b=>{
+      el('rect',{x:X(b.t0),y,width:Math.max(X(b.t1)-X(b.t0)-2,1),height:32,rx:4,fill:'var(--amber)',opacity:.8},sv);
+      if(X(b.t1)-X(b.t0)>30)txt('批 '+b.s,{x:(X(b.t0)+X(b.t1))/2,y:y+21,'text-anchor':'middle',class:'m'},sv).style.fill='#fff';
+    });
+  }
+  const gy=56+4*44+10;
+  txt('GPU 训练',{x:20,y:gy+24,class:'big'},sv);
+  el('line',{x1:110,y1:gy+38,x2:660,y2:gy+38,stroke:'var(--line)'},sv);
+  const tr=S.train.filter(b=>b.s<k);
+  tr.forEach((b,i)=>{
+    const prev=i===0?0:tr[i-1].t1;
+    if(b.t0-prev>0.5)el('rect',{x:X(prev),y:gy,width:X(b.t0)-X(prev),height:32,fill:'none',stroke:'var(--bad)','stroke-dasharray':'3 3'},sv);
+    el('rect',{x:X(b.t0),y:gy,width:Math.max(X(b.t1)-X(b.t0)-2,1),height:32,rx:4,fill:'var(--accent)'},sv);
+  });
+  txt('红色虚框 = GPU 在等数据',{x:110,y:gy+60,class:'m'},sv).style.fill='var(--bad)';
+  if(k>=STEPS){
+    txt(`8 步用时 ${S.end} ms，GPU 忙碌占比 ${(S.busy*100).toFixed(0)}%`,{x:110,y:350,class:'big'},sv);
+    txt(`需要的 worker 数 ≥ t_d ÷ t_s = ${TD} ÷ ${TS} = ${(TD/TS).toFixed(1)}`,{x:110,y:376,class:'m'},sv);
+  }else txt(`已画 ${k} / ${STEPS} 步`,{x:110,y:350,class:'m'},sv);
+  $('nwv').textContent=nw;$('tdv').textContent=TD;
+}
+let auto=true;
+function reset(){k=0;if(auto)nwi=0;draw()}
+function next(){
+  if(k<STEPS){k++;draw();return true}
+  if(auto&&nwi<NWS.length-1){nwi++;k=0;draw();return true}
+  return false;
+}
+$('nw').oninput=e=>{ANIM.stop();auto=false;nwi=+e.target.value;k=STEPS;draw()};
+$('td').oninput=e=>{ANIM.stop();auto=false;TD=+e.target.value;k=STEPS;draw()};
+setupPlayer({captureSeed:1,reset,next},500);
+</script></body></html>

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>nn.Module 模块树</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 7 章 · 模块树与 state_dict 清单</h1>
+<p class="sub">配套讲义：<a href="../lessons/07-nn-module.html">第 7 章 · nn.Module：一棵自动登记参数的积木树</a>。模型 = fc1 → 两个中间层 blocks → drop → fc2。中间两层分别用 nn.ModuleList 和普通 list 装。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><button id="tl"></button></div>
+<p class="note">看点：① 每登记一个子模块，它的参数进入右边清单，计数器累加；② 普通 list 里的层画成虚线：不进清单、不计参数、优化器看不到；③ drop 没有参数，但受 train / eval 影响。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let ml=true,k=0;
+const NODES=[
+  {n:'fc1',path:'fc1',p:[['weight','8×4',32],['bias','8',8]],x:110,y:150},
+  {n:'blocks',path:'blocks',p:[],x:250,y:150,box:true},
+  {n:'0',path:'blocks.0',p:[['weight','8×8',64],['bias','8',8]],x:210,y:240,inList:true},
+  {n:'1',path:'blocks.1',p:[['weight','8×8',64],['bias','8',8]],x:290,y:240,inList:true},
+  {n:'drop',path:'drop',p:[],x:370,y:150,drop:true},
+  {n:'fc2',path:'fc2',p:[['weight','3×8',24],['bias','3',3]],x:470,y:150}];
+function draw(){
+  clear(sv);
+  const cap=k===0?'class MLP(nn.Module)：先有根节点':k<=NODES.length?`登记 self.${NODES[k-1].path.split('.')[0]}${NODES[k-1].inList?`[${NODES[k-1].n}]`:''}`:'登记完毕：state_dict 就是右边这张清单';
+  txt(cap,{x:340,y:26,'text-anchor':'middle',class:'cap'},sv);
+  // root
+  el('rect',{x:240,y:56,width:120,height:36,rx:8,fill:'var(--accent-bg)',stroke:'var(--accent)'},sv);
+  txt('MLP（根）',{x:300,y:79,'text-anchor':'middle',class:'big'},sv);
+  const rows=[];let total=0;
+  NODES.forEach((nd,i)=>{
+    if(i>=k)return;
+    const ghost=nd.inList&&!ml||(nd.box&&!ml);
+    const px=nd.inList?250:300,py=nd.inList?168:92;
+    el('line',{x1:px,y1:py,x2:nd.x,y2:nd.y-18,stroke:'var(--line)','stroke-dasharray':ghost?'4 3':''},sv);
+    const r=el('rect',{x:nd.x-42,y:nd.y-18,width:84,height:36,rx:8,fill:i===k-1?'var(--accent-bg)':'var(--bg)',stroke:ghost?'var(--bad)':(i===k-1?'var(--accent)':'var(--line)'),'stroke-dasharray':ghost?'4 3':''},sv);
+    const label=nd.box?(ml?'ModuleList':'list（普通）'):nd.n;
+    const t=txt(label,{x:nd.x,y:nd.y+5,'text-anchor':'middle',class:nd.box?'m':'big'},sv);
+    if(ghost)t.style.fill='var(--bad)';
+    if(nd.drop){const d=txt('无参数，受 train/eval 影响',{x:nd.x,y:nd.y+36,'text-anchor':'middle',class:'m'},sv);d.style.fill='var(--purple)'}
+    if(!ghost)nd.p.forEach(([pn,sh,c])=>{rows.push([`${nd.path}.${pn}`,sh,c,i===k-1]);total+=c});
+    if(ghost&&nd.inList&&i===k-1){const w=txt('不登记！',{x:nd.x,y:nd.y+36,'text-anchor':'middle',class:'m'},sv);w.style.fill='var(--bad)'}
+  });
+  // state dict
+  const sx=560,sy=60;
+  el('rect',{x:sx-50,y:sy,width:170,height:300,rx:8,fill:'var(--bg)',stroke:'var(--line)'},sv);
+  txt('state_dict()',{x:sx+35,y:sy+22,'text-anchor':'middle',class:'big'},sv);
+  rows.forEach(([n,sh,c,nw],j)=>{
+    const t=txt(n,{x:sx-42,y:sy+48+j*30,class:'code'},sv);if(nw)t.style.fill='var(--teal)';
+    txt(`(${sh})`,{x:sx-42,y:sy+62+j*30,class:'m'},sv);
+  });
+  txt(`参数总数：${total}`,{x:40,y:330,class:'big'},sv);
+  txt(ml?'ModuleList 版：fc1 40 + blocks 144 + fc2 27 = 211':'普通 list 版：blocks 的 144 个参数丢了，只剩 67',{x:40,y:356,class:'m'},sv);
+  txt('优化器 = torch.optim.AdamW(model.parameters())，只能更新清单里的',{x:40,y:380,class:'m'},sv);
+  $('tl').textContent='中间层装在：'+(ml?'nn.ModuleList':'普通 list');
+}
+function reset(){k=0;draw()}
+function next(){if(k>NODES.length)return false;k++;draw();return true}
+$('tl').onclick=()=>{ml=!ml;draw()};
+setupPlayer({captureSeed:1,reset,next},1300);
+</script></body></html>

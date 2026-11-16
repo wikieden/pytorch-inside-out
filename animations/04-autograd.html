@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Autograd 前向与反向</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:13px}svg text.big{font-size:16px;font-weight:500}</style></head>
+<body><main>
+<h1>第 4 章 · 前向记账，反向传梯度</h1>
+<p class="sub">配套讲义：<a href="../lessons/04-autograd.html">第 4 章 · Autograd：账本怎么记、怎么倒着算</a>。z = w·x + b，L = z²，x = 2，b = 1。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button><button id="again" class="ctl">再反向一次（不清零）</button></div>
+<div class="row ctl"><label for="wv">w 的值</label><input type="range" id="wv" min="1" max="5" step="1" value="3"><span id="wvv">3</span></div>
+<p class="note">看点：① 前向从左往右，每算一步账本多一个节点；② 反向从右往左，箭头上写"收到的梯度 × 这一步的放大倍数"；③ 再反向一次，.grad 是加上去的，不是覆盖。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let k=0,W=3,times=1;const X=2,B=1;
+const P={w:[70,110],x:[70,210],b:[70,310],mul:[250,160],add:[420,235],pow:[580,235]};
+function node(p,label,val,on,col){
+  el('circle',{cx:p[0],cy:p[1],r:34,fill:on?'var(--accent-bg)':'var(--bg)',stroke:on?'var(--accent)':'var(--line)','stroke-width':on?2:1},sv);
+  txt(label,{x:p[0],y:p[1]-4,'text-anchor':'middle',class:'big'},sv);
+  if(val!==null){const t=txt(val,{x:p[0],y:p[1]+16,'text-anchor':'middle',class:'code'},sv);if(col)t.style.fill=col}
+}
+function edge(a,b,lab,back,show){
+  const [x1,y1]=P[a],[x2,y2]=P[b];
+  el('line',{x1:x1+30,y1,x2:x2-34,y2,stroke:back&&show?'var(--warm)':'var(--line)','stroke-width':back&&show?2:1},sv);
+  if(show&&lab){const t=txt(lab,{x:(x1+x2)/2,y:(y1+y2)/2-8,'text-anchor':'middle',class:'m'},sv);t.style.fill=back?'var(--warm)':'var(--muted)'}
+}
+function draw(){
+  clear(sv);
+  const m=W*X,z=m+B,L=z*z,gz=2*z;
+  const CAP=['准备：w、b 要梯度（叶子），x 不要',
+    `前向 ① w × x = ${W} × ${X} = ${m}，账本记 MulBackward0`,
+    `前向 ② z = ${m} + ${B} = ${z}，账本记 AddBackward0`,
+    `前向 ③ L = z² = ${L}，账本记 PowBackward0`,
+    `反向 ① 从 L 出发收到 1；z² 的放大倍数 2z = ${gz} → 传 ${gz}`,
+    `反向 ② 加法对两个输入的倍数都是 1：传 ${gz} 给乘法，${gz} 给 b`,
+    `反向 ③ 乘法对 w 的倍数是 x = ${X}：${gz} × ${X} = ${gz*X} 存进 w.grad`];
+  txt(times>1&&k>=6?`又反向了一次：.grad 累加到 ${times} 倍`:CAP[k],{x:340,y:28,'text-anchor':'middle',class:'cap'},sv);
+  const back=k>=4;
+  edge('w','mul',null,false,true);edge('x','mul',null,false,true);
+  edge('mul','add',k>=5?`← ${gz}`:'',true,k>=5);
+  edge('b','add',k>=5?`← ${gz}`:'',true,k>=5);
+  edge('add','pow',k>=4?`← ${gz}`:'',true,k>=4);
+  if(k>=6){const t=txt(`← ${gz} × ${X} = ${gz*X}`,{x:160,y:122,'text-anchor':'middle',class:'m'},sv);t.style.fill='var(--warm)'}
+  const wg=k>=6?gz*X*times:null,bg=k>=5?gz*(k>=6?times:1):null;
+  node(P.w,'w',`= ${W}`,k===6);
+  node(P.x,'x',`= ${X}`,false);
+  node(P.b,'b',`= ${B}`,k===5);
+  node(P.mul,'×',k>=1?`= ${m}`:null,k===1);
+  node(P.add,'+',k>=2?`z = ${z}`:null,k===2||k===5);
+  node(P.pow,'²',k>=3?`L = ${L}`:null,k===3||k===4);
+  // ledger
+  const led=['MulBackward0','AddBackward0','PowBackward0'];
+  txt('账本（grad_fn）',{x:470,y:330,class:'m'},sv);
+  led.forEach((s,i)=>{if(k>i){const t=txt(s,{x:470,y:350+i*16,class:'code'},sv);t.style.fill='var(--teal)'}});
+  const g1=txt(`w.grad = ${wg===null?'None':wg}`,{x:150,y:372,class:'code'},sv);if(wg!==null)g1.style.fill='var(--warm)';
+  const g2=txt(`b.grad = ${bg===null?'None':bg}`,{x:150,y:392,class:'code'},sv);if(bg!==null)g2.style.fill='var(--warm)';
+}
+function reset(){k=0;times=1;draw()}
+function next(){if(k>=6)return false;k++;draw();return true}
+$('again').onclick=()=>{ANIM.stop();if(k<6)k=6;times++;draw()};
+$('wv').oninput=e=>{W=+e.target.value;$('wvv').textContent=W;times=1;draw()};
+setupPlayer({captureSeed:1,reset,next},1500);
+</script></body></html>

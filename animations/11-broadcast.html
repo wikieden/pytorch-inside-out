@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>广播对齐</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.cell{font-size:16px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:13px}</style></head>
+<body><main>
+<h1>第 11 章 · 广播：从右往左对齐</h1>
+<p class="sub">配套讲义：<a href="../lessons/11-shape-broadcast.html">第 11 章 · 形状与广播：从右往左对齐，1 可以拉伸</a>。每对维度：相等 ✓，有一个是 1 ✓（拉伸），有一个不存在 ✓（当成 1），否则 ✗。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl" id="cases"></div>
+<p class="note">看点：① 两个形状右对齐，从最右一对开始检查；② 是 1 或不存在的维度画拉伸箭头；③ 最后一组展开成格子：(3, 1) + (2,) 得到 3 × 2 的加法表。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const CASES=[[[2,3,4],[4]],[[2,3,4],[3,1]],[[2,3,4],[3]],[[3,1],[2]]];
+let ci=0,k=0;
+const cb=$('cases');
+CASES.forEach((c,i)=>{const b=document.createElement('button');b.textContent=`(${c[0]}) + (${c[1]})`;b.onclick=()=>{ANIM.stop();ci=i;k=0;draw()};cb.appendChild(b)});
+function draw(){
+  clear(sv);[...cb.children].forEach((b,i)=>b.classList.toggle('on',i===ci));
+  const [a,b]=CASES[ci],n=Math.max(a.length,b.length);
+  const A=[...Array(n-a.length).fill(null),...a],B=[...Array(n-b.length).fill(null),...b];
+  const X=i=>340-(n*90)/2+i*90+45;
+  txt(`(${a.join(', ')}) + (${b.join(', ')})`,{x:340,y:26,'text-anchor':'middle',class:'cap'},sv);
+  txt('a',{x:X(0)-70,y:88,class:'code'},sv);txt('b',{x:X(0)-70,y:148,class:'code'},sv);txt('结果',{x:X(0)-80,y:218,class:'code'},sv);
+  let ok=true;const res=[];
+  for(let i=n-1;i>=0;i--){
+    const step=n-1-i,shown=step<k;
+    const av=A[i],bv=B[i];
+    [[av,70],[bv,130]].forEach(([v,y])=>{
+      el('rect',{x:X(i)-30,y,width:60,height:28,rx:6,fill:v===null?'var(--card)':'var(--bg)',stroke:'var(--line)','stroke-dasharray':v===null?'4 3':''},sv);
+      const t=txt(v===null?'无':v,{x:X(i),y:y+20,'text-anchor':'middle',class:'cell'},sv);if(v===null)t.style.fill='var(--muted)';
+    });
+    if(!shown){res[i]=null;continue}
+    const a1=av===null?1:av,b1=bv===null?1:bv;
+    const good=a1===b1||a1===1||b1===1;
+    if(!good)ok=false;
+    res[i]=good?Math.max(a1,b1):'✗';
+    const m=txt(good?'✓':'✗',{x:X(i)+40,y:120,class:'cell'},sv);m.style.fill=good?'var(--good)':'var(--bad)';
+    if(good&&a1!==b1){const y=a1===1?84:144;const t=txt('拉伸 →'+Math.max(a1,b1),{x:X(i),y:y+40-(a1===1?0:0),'text-anchor':'middle',class:'m'},sv);t.setAttribute('y',a1===1?62:178);t.style.fill='var(--purple)'}
+    el('rect',{x:X(i)-30,y:200,width:60,height:28,rx:6,fill:good?'var(--accent-bg)':'var(--bg)',stroke:good?'var(--accent)':'var(--bad)'},sv);
+    const r=txt(res[i],{x:X(i),y:220,'text-anchor':'middle',class:'cell'},sv);if(!good)r.style.fill='var(--bad)';
+    if(!good){const e=txt(`第 ${i} 维 ${a1} 和 ${b1} 对不上，都不是 1 → 报错`,{x:340,y:262,'text-anchor':'middle',class:'m'},sv);e.style.fill='var(--bad)'}
+  }
+  if(k>=n&&ok&&ci===3){
+    const col=[1,2,3],row=[10,20];
+    txt('展开：[[1],[2],[3]] + [10, 20]',{x:340,y:262,'text-anchor':'middle',class:'m'},sv);
+    for(let i=0;i<3;i++){
+      const t=txt(col[i],{x:250,y:302+i*30,'text-anchor':'middle',class:'cell'},sv);t.style.fill='var(--teal)';
+      for(let j=0;j<2;j++){
+        if(i===0){const h=txt(row[j],{x:320+j*70,y:282,'text-anchor':'middle',class:'cell'},sv);h.style.fill='var(--amber)'}
+        el('rect',{x:295+j*70,y:284+i*30,width:50,height:26,rx:4,fill:'var(--bg)',stroke:'var(--line)'},sv);
+        txt(col[i]+row[j],{x:320+j*70,y:302+i*30,'text-anchor':'middle',class:'cell'},sv);
+      }
+    }
+  }else if(k>=n&&ok){txt(`结果形状 (${res.join(', ')})，不复制数据：拉伸靠 stride = 0`,{x:340,y:262,'text-anchor':'middle',class:'m'},sv)}
+}
+let auto=true;
+function reset(){k=0;if(auto)ci=0;draw()}
+function next(){const n=Math.max(CASES[ci][0].length,CASES[ci][1].length);if(k<n){k++;draw();return true}if(auto&&ci<CASES.length-1){ci++;k=0;draw();return true}return false}
+setupPlayer({captureSeed:1,reset,next},900);
+</script></body></html>

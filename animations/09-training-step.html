@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>训练循环一步</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}</style></head>
+<body><main>
+<h1>第 9 章 · 一步训练的流水线</h1>
+<p class="sub">配套讲义：<a href="../lessons/09-training-loop.html">第 9 章 · 训练循环：五行主干 + 三件护具</a>。用 nn.Linear(1, 1) 拟合 y = 3x + 1，32 个点，SGD，MSE loss。初始 w = 0.27、b = −0.03（编的）。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><label for="lr">学习率</label><input type="range" id="lr" min="0.05" max="1.2" step="0.05" value="0.5"><span id="lrv">0.5</span></div>
+<p class="note">看点：① 每个训练步依次执行五行代码，当前一行高亮；② 左边直线每步往答案靠；③ 学习率拖到 1.0 以上（对这个问题），loss 开始震荡甚至发散。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const N=32,XS=[...Array(N)].map((_,i)=>-1+2*i/(N-1)),YS=XS.map(x=>3*x+1);
+let LR=0.5,w,b,phase,step,hist,gw,gb,loss;
+const LINES=['pred = model(x)','loss = mse(pred, y)','opt.zero_grad()','loss.backward()','opt.step()'];
+function lossOf(w,b){return XS.reduce((a,x,i)=>a+(w*x+b-YS[i])**2,0)/N}
+function draw(){
+  clear(sv);
+  txt(`第 ${step} 步：${phase<0?'准备':LINES[phase]}`,{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  // scatter
+  const px=x=>40+(x+1)*90,py=y=>210-y*30;
+  el('rect',{x:30,y:60,width:200,height:300,fill:'var(--bg)',stroke:'var(--line)'},sv);
+  XS.forEach((x,i)=>el('circle',{cx:px(x),cy:py(YS[i]),r:2.5,fill:'var(--muted)'},sv));
+  const cw=Math.max(-6,Math.min(6,w)),cb=Math.max(-6,Math.min(6,b));
+  el('line',{x1:px(-1),y1:py(cw*-1+cb),x2:px(1),y2:py(cw+cb),stroke:'var(--accent)','stroke-width':2},sv);
+  txt(`w = ${w.toFixed(3)}`,{x:40,y:378,class:'code'},sv);txt(`b = ${b.toFixed(3)}`,{x:140,y:378,class:'code'},sv);
+  // code
+  LINES.forEach((l,i)=>{
+    const on=i===phase;
+    el('rect',{x:250,y:80+i*40,width:200,height:30,rx:6,fill:on?'var(--accent-bg)':'var(--bg)',stroke:on?'var(--accent)':'var(--line)'},sv);
+    txt(`${i+1}  ${l}`,{x:260,y:100+i*40,class:'code'},sv);
+  });
+  let info='';
+  if(phase===1)info=`loss = ${loss.toFixed(4)}`;
+  if(phase===2)info='w.grad = None, b.grad = None';
+  if(phase===3)info=`w.grad = ${gw.toFixed(3)}, b.grad = ${gb.toFixed(3)}`;
+  if(phase===4)info=`w -= ${LR} × ${gw.toFixed(3)}`;
+  const it=txt(info,{x:250,y:300,class:'code'},sv);it.style.fill='var(--warm)';if(phase===4){const i2=txt(`b -= ${LR} × ${gb.toFixed(3)}`,{x:250,y:320,class:'code'},sv);i2.style.fill='var(--warm)'}
+  // loss curve
+  const lx=470,ly=60,lw=190,lh=300;
+  el('rect',{x:lx,y:ly,width:lw,height:lh,fill:'var(--bg)',stroke:'var(--line)'},sv);
+  txt('loss（对数坐标）',{x:lx+6,y:ly+16,class:'m'},sv);
+  const LY=v=>ly+lh-10-(Math.log10(Math.max(v,1e-6))+6)/8*(lh-30);
+  const pts=hist.map((v,i)=>`${lx+8+i*(lw-16)/20},${LY(v)}`).join(' ');
+  if(hist.length)el('polyline',{points:pts,fill:'none',stroke:'var(--warm)','stroke-width':2},sv);
+  $('lrv').textContent=LR;
+}
+function reset(){w=0.27;b=-0.03;phase=-1;step=0;hist=[];gw=gb=0;loss=lossOf(w,b);draw()}
+function next(){
+  if(step>=20&&phase===4)return false;
+  phase++;
+  if(phase>4){phase=0;step++}
+  if(phase===1){loss=lossOf(w,b);hist.push(loss)}
+  if(phase===3){gw=XS.reduce((a,x,i)=>a+2*(w*x+b-YS[i])*x,0)/N;gb=XS.reduce((a,x,i)=>a+2*(w*x+b-YS[i]),0)/N}
+  if(phase===4){w-=LR*gw;b-=LR*gb}
+  draw();return true;
+}
+$('lr').oninput=e=>{ANIM.stop();LR=+e.target.value;reset()};
+setupPlayer({captureSeed:1,reset,next},350);
+</script></body></html>

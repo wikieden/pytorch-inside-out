@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tensor 的 stride</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:13px}svg text.cell{font-size:16px;font-weight:500}</style></head>
+<body><main>
+<h1>第 2 章 · 同一块内存，几份说明书</h1>
+<p class="sub">配套讲义：<a href="../lessons/02-tensor-stride.html">第 2 章 · Tensor 内部：一块内存 + 一张&quot;怎么读&quot;的说明书</a>。下面一排是 storage（一维内存），上面是按 shape / stride / offset 摆出来的表格。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl" id="modes"></div>
+<p class="note">看点：① 每点亮一个格子，连线指向它在 storage 里的位置，算式 = offset + i × stride₀ + j × stride₁；② 转置时连线跳着读（不连续）；③ 切片只是起点 offset 变了；④ expand 的 stride 是 0，几行连到同一段内存。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const ST=[0,1,2,3,4,5];
+const MODES=[
+  {k:'x',name:'原张量 x',code:'x = torch.arange(6).view(2, 3)',shape:[2,3],stride:[3,1],off:0,note:'contiguous：按行老实排'},
+  {k:'t',name:'转置 x.t()',code:'x.t()',shape:[3,2],stride:[1,3],off:0,note:'stride 对调成 (1, 3)：按行读要跳着读 → 不连续'},
+  {k:'s',name:'切片 x[:, 1:]',code:'x[:, 1:]',shape:[2,2],stride:[3,1],off:1,note:'stride 不变，offset 变成 1'},
+  {k:'e',name:'expand',code:'x[0].expand(3, 3)',shape:[3,3],stride:[0,1],off:0,note:'stride₀ = 0：三行读同一段内存，不复制'}];
+let mi=0,ci=-1;
+const mb=$('modes');
+MODES.forEach((m,i)=>{const b=document.createElement('button');b.textContent=m.name;b.onclick=()=>{ANIM.stop();mi=i;ci=-1;draw()};mb.appendChild(b)});
+function draw(){
+  clear(sv);
+  const M=MODES[mi],[R,C]=M.shape,n=R*C;
+  [...mb.children].forEach((b,i)=>b.classList.toggle('on',i===mi));
+  const t=txt(`${M.code}   shape (${M.shape.join(', ')})  stride (${M.stride.join(', ')})  offset ${M.off}`,{x:340,y:26,'text-anchor':'middle',class:'code'},sv);
+  txt(M.note,{x:340,y:48,'text-anchor':'middle',class:'cap'},sv);
+  // storage
+  const SX=i=>130+i*72, SY=320;
+  txt('storage',{x:20,y:SY+30,class:'m'},sv);
+  const hitS=new Set();
+  if(ci>=0){const i=Math.floor(ci/C),j=ci%C;hitS.add(M.off+i*M.stride[0]+j*M.stride[1])}
+  ST.forEach((v,i)=>{
+    const on=hitS.has(i);
+    el('rect',{x:SX(i),y:SY,width:60,height:44,rx:6,fill:on?'var(--accent-bg)':'var(--bg)',stroke:on?'var(--accent)':'var(--line)','stroke-width':on?2:1},sv);
+    txt(v,{x:SX(i)+30,y:SY+28,'text-anchor':'middle',class:'cell'},sv);
+    txt('第 '+i+' 格',{x:SX(i)+30,y:SY+62,'text-anchor':'middle',class:'m'},sv);
+  });
+  // table
+  const CW=62,CH=46,TX=340-C*CW/2,TY=78;
+  for(let i=0;i<R;i++)for(let j=0;j<C;j++){
+    const k=i*C+j,pos=M.off+i*M.stride[0]+j*M.stride[1],done=k<=ci,cur=k===ci;
+    el('rect',{x:TX+j*CW,y:TY+i*CH,width:CW-6,height:CH-6,rx:6,fill:cur?'var(--accent-bg)':'var(--card)',stroke:cur?'var(--accent)':'var(--line)','stroke-width':cur?2:1},sv);
+    const tt=txt(done?ST[pos]:'?',{x:TX+j*CW+(CW-6)/2,y:TY+i*CH+28,'text-anchor':'middle',class:'cell'},sv);
+    if(!done)tt.style.fill='var(--muted)';
+    if(cur){
+      el('line',{x1:TX+j*CW+(CW-6)/2,y1:TY+i*CH+CH-6,x2:SX(pos)+30,y2:SY,stroke:'var(--warm)','stroke-width':2},sv);
+      const f=txt(`[${i}, ${j}] → ${M.off} + ${i}×${M.stride[0]} + ${j}×${M.stride[1]} = ${pos}`,{x:340,y:300,'text-anchor':'middle',class:'code'},sv);
+      f.style.fill='var(--warm)';
+    }
+  }
+  if(ci>=0&&ci>=n-1){
+    const order=[];for(let i=0;i<R;i++)for(let j=0;j<C;j++)order.push(M.off+i*M.stride[0]+j*M.stride[1]);
+    const o=txt('按行读出的 storage 格号：'+order.join(', '),{x:340,y:282,'text-anchor':'middle',class:'m'},sv);
+  }
+}
+function reset(){mi=0;ci=-1;draw()}
+function next(){
+  const M=MODES[mi],n=M.shape[0]*M.shape[1];
+  if(ci<n-1){ci++;draw();return true}
+  if(mi<MODES.length-1){mi++;ci=-1;draw();return true}
+  return false;
+}
+setupPlayer({captureSeed:1,reset,next},900);
+</script></body></html>

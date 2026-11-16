@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>一行代码的旅程</title><link rel="stylesheet" href="anim.css">
+<style>svg text.big{font-size:15px;font-weight:500}svg text.cap{font-size:15px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:13px}</style></head>
+<body><main>
+<h1>第 1 章 · 一行 <code>y = x @ w</code> 的旅程</h1>
+<p class="sub">配套讲义：<a href="../lessons/01-op-journey.html">第 1 章 · PyTorch 做了什么：一行 y = x @ w 的旅程</a>。单子从左往右走四站：服务员接单 → 前台看标签 → 记账员记一笔 → 厨房下锅。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><button id="tg">要记账（requires_grad）：开</button><button id="td">设备：GPU</button></div>
+<p class="note">看点：① 分派器被问两次：先看"要不要记账"，再看"在哪个设备"；② 记账员在账本上记下 MmBackward0，结果 y 身上就带着这张纸条；③ 答完讲义题 3 再拨两个开关，看哪一站变了。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let k=0,grad=true,gpu=true;
+const ST=[
+  {n:'① Python 前端',r:'服务员',d:'接单，翻译成 C++'},
+  {n:'② 分派器',r:'前台调度',d:'看标签决定交给谁'},
+  {n:'③ Autograd',r:'记账员',d:'需要的话记一笔'},
+  {n:'④ Kernel',r:'厨房',d:'真正做乘法'}];
+const BX=i=>18+i*165, BW=150;
+// 每一帧单子停在哪一站（-1 = 还没出发，4 = 已出结果）；dq = 分派器这次看的是哪个标签
+const FR=[{at:-1},{at:0},{at:1,dq:0},{at:2},{at:1,dq:1},{at:3},{at:4}];
+function caps(f){
+  const g=grad,d=gpu?'GPU':'CPU';
+  return [
+    '你写下 y = x @ w，按下回车',
+    '① 服务员接单：把 x @ w 翻译成 C++ 核心能懂的单子',
+    g?'② 前台第一次看标签："要记账"→ 先交给记账员':'② 前台第一次看标签：没有"要记账"→ 不用找记账员',
+    g?'③ 记账员在账本上记一笔：MmBackward0（用了 x 和 w）':'③ 不要求梯度：记账员这一站跳过',
+    (g?'② 撕掉"要记账"标签，前台第二次看标签：':'② 前台接着看下一个标签：')+`"在 ${d} 上"→ 去 ${d} 厨房`,
+    `④ ${d} 厨房真正做矩阵乘法`,
+    g?'结果 y 出炉，身上带着纸条 grad_fn = MmBackward0':'结果 y 出炉，没记账，grad_fn = None'][f];
+}
+function box(x,y,w,h,on,dim){
+  const r=el('rect',{x,y,width:w,height:h,rx:10,fill:on?'var(--accent-bg)':'var(--bg)',stroke:on?'var(--accent)':'var(--line)','stroke-width':on?2:1},sv);
+  if(dim)r.setAttribute('opacity','.35');return r;
+}
+function draw(){
+  clear(sv);
+  const d=el('defs',{},sv),m=el('marker',{id:'ar',viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:6,markerHeight:6,orient:'auto'},d);
+  el('path',{d:'M0,0 L10,5 L0,10 z',fill:'var(--muted)'},m);
+  const f=FR[k];
+  txt(caps(k),{x:340,y:26,'text-anchor':'middle',class:'cap'},sv);
+  // 四站
+  ST.forEach((s,i)=>{
+    const skip=i===2&&!grad&&k>=3;
+    const on=f.at===i;
+    box(BX(i),50,BW,80,on,skip);
+    const t1=txt(s.n,{x:BX(i)+BW/2,y:76,'text-anchor':'middle',class:'big'},sv);
+    const t2=txt(s.r,{x:BX(i)+BW/2,y:98,'text-anchor':'middle'},sv);t2.style.fill='var(--purple)';
+    const t3=txt(skip?'跳过':s.d,{x:BX(i)+BW/2,y:118,'text-anchor':'middle',class:'m'},sv);
+    if(skip){[t1,t2].forEach(t=>t.setAttribute('opacity','.4'));t3.style.fill='var(--bad)'}
+    if(i<3)el('line',{x1:BX(i)+BW+2,y1:90,x2:BX(i+1)-2,y2:90,stroke:'var(--muted)','marker-end':'url(#ar)'},sv);
+  });
+  // 单子
+  if(f.at>=0&&f.at<4){
+    const cx=BX(f.at)+BW/2;
+    el('rect',{x:cx-38,y:140,width:76,height:24,rx:6,fill:'var(--amber)'},sv);
+    const t=txt('x @ w',{x:cx,y:157,'text-anchor':'middle',class:'code'},sv);t.style.fill='#fff';
+  }else if(f.at<0){
+    const t=txt('>>> y = x @ w',{x:BX(0)+8,y:157,class:'code'},sv);t.style.fill='var(--muted)';
+  }
+  // ② 标签表
+  const tx=BX(1),ty=190;
+  txt('标签（从上往下看）',{x:tx,y:ty,class:'m'},sv);
+  const tags=[{l:'要记账',has:grad,step:2},{l:`设备 ${gpu?'CUDA (GPU)':'CPU'}`,has:true,step:4}];
+  tags.forEach((tg,j)=>{
+    const y=ty+10+j*34;
+    const look=f.at===1&&f.dq===j;
+    const torn=j===0&&k>=4&&grad;
+    const r=box(tx,y,BW,26,look,!tg.has||torn);
+    const t=txt(torn?'✂ 要记账（已撕掉）':(tg.has?'':'（无）')+tg.l,{x:tx+8,y:y+18},sv);
+    if(!tg.has||torn)t.setAttribute('opacity','.5');
+  });
+  // ③ 账本
+  const lx=BX(2),ly=190;
+  txt('账本（计算图）',{x:lx,y:ly,class:'m'},sv);
+  box(lx,ly+10,BW,60,f.at===2,!grad&&k>=3);
+  if(grad&&k>=3){const t=txt('MmBackward0',{x:lx+BW/2,y:ly+36,'text-anchor':'middle',class:'code'},sv);t.style.fill='var(--teal)';
+    txt('存下 x、w 供反向用',{x:lx+BW/2,y:ly+56,'text-anchor':'middle',class:'m'},sv)}
+  else if(!grad&&k>=3){const t=txt('没记',{x:lx+BW/2,y:ly+44,'text-anchor':'middle'},sv);t.style.fill='var(--bad)'}
+  else txt('（空）',{x:lx+BW/2,y:ly+44,'text-anchor':'middle',class:'m'},sv);
+  // ④ 两个厨房
+  const kx=BX(3),ky=190;
+  txt('两个厨房',{x:kx,y:ky,class:'m'},sv);
+  [['CPU 厨房',false],['GPU 厨房 (cuBLAS)',true]].forEach(([l,isG],j)=>{
+    const y=ky+10+j*34;
+    const chosen=k>=4&&isG===gpu;
+    const r=box(kx,y,BW,26,chosen&&f.at===3,k>=4&&!chosen);
+    if(chosen&&f.at!==3)r.setAttribute('stroke','var(--accent)');
+    txt(l+(chosen?' ✓':''),{x:kx+8,y:y+18},sv);
+  });
+  // 结果
+  el('line',{x1:20,y1:300,x2:660,y2:300,stroke:'var(--line)'},sv);
+  if(k>=6){
+    txt('结果',{x:20,y:330,class:'m'},sv);
+    txt(`y：形状 (2, 4)，在 ${gpu?'cuda:0':'cpu'} 上`,{x:70,y:330,class:'code'},sv);
+    const t=txt(`y.grad_fn = ${grad?'<MmBackward0>':'None'}`,{x:70,y:356,class:'code'},sv);
+    t.style.fill=grad?'var(--teal)':'var(--bad)';
+    txt(grad?'← 账本上那一笔，loss.backward() 时照着它倒推':'← 没有记账，没法对这一步求导',{x:300,y:356,class:'m'},sv);
+  }else txt('结果还没出来',{x:20,y:340,class:'m'},sv);
+  $('tg').textContent='要记账（requires_grad）：'+(grad?'开':'关');
+  $('td').textContent='设备：'+(gpu?'GPU':'CPU');
+}
+function reset(){k=0;draw()}
+function next(){if(k>=FR.length-1)return false;k++;draw();return true}
+$('tg').onclick=()=>{grad=!grad;draw()};
+$('td').onclick=()=>{gpu=!gpu;draw()};
+setupPlayer({captureSeed:1,reset,next},1600);
+</script></body></html>

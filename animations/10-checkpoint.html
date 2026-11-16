@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>断点存档</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 10 章 · 一份完整存档里有什么</h1>
+<p class="sub">配套讲义：<a href="../lessons/10-save-load.html">第 10 章 · 保存与加载：存清单、不存对象，断点要存全</a>。float32 参数 + AdamW。训练曲线是编的，只看形状。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><label>参数量（亿）</label><input type="range" id="np" min="1" max="70" value="13"><span id="npv">13</span><button id="tf"></button></div>
+<p class="note">看点：① 存档 = 参数 4 字节 + AdamW 两份动量 8 字节，约 12 字节 / 参数；② 第 600 步断了，只存模型时重启后 loss 往上跳；存全套时无缝接上。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let NP=13,full=false,k=0;
+function curve(s){return 4*Math.exp(-s/250)+1.2+0.05*Math.sin(s/17)}
+function draw(){
+  clear(sv);
+  const P=NP*1e8,gb=b=>(b/1e9).toFixed(1);
+  const parts=[['模型参数',4*P,'var(--accent)',true],['AdamW exp_avg',4*P,'var(--purple)',full],['AdamW exp_avg_sq',4*P,'var(--teal)',full],['调度器 / 步数 / RNG','tiny','var(--amber)',full]];
+  txt(full?'存全套：模型 + 优化器 + 调度器 + 步数 + 随机数':'只存模型参数',{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  let y=200,tot=0;const H=b=>b==='tiny'?4:b/(12*70e8)*150;
+  parts.forEach(([n,b,c,on],i)=>{
+    if(!on||k<i+1&&k<5)return;
+    const h=H(b);y-=h;el('rect',{x:60,y,width:70,height:h,fill:c},sv);
+    const ly=70+i*22;el('rect',{x:140,y:ly-10,width:10,height:10,fill:c},sv);
+    txt(`${n}${b==='tiny'?'（几 KB）':`  ${gb(b)} GB`}`,{x:156,y:ly,class:'m'},sv);
+    if(b!=='tiny')tot+=b;
+  });
+  el('line',{x1:50,y1:200,x2:300,y2:200,stroke:'var(--line)'},sv);
+  txt(`${NP} 亿参数 → 存档 ${gb(tot)} GB`,{x:60,y:225,class:'big'},sv);
+  // curve
+  const cx=330,cy=60,cw=330,ch=150,S=1200;
+  el('rect',{x:cx,y:cy,width:cw,height:ch,fill:'var(--bg)',stroke:'var(--line)'},sv);
+  txt('loss',{x:cx+6,y:cy+16,class:'m'},sv);
+  const X=s=>cx+s/S*cw,Y=v=>cy+ch-(v-1)/4.5*ch;
+  const upto=Math.min(S,k*200);
+  let pts=[];for(let s=0;s<=Math.min(upto,600);s+=10)pts.push(`${X(s)},${Y(curve(s))}`);
+  el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--accent)','stroke-width':2},sv);
+  if(upto>600){
+    el('line',{x1:X(600),y1:cy,x2:X(600),y2:cy+ch,stroke:'var(--bad)','stroke-dasharray':'4 3'},sv);
+    txt('断了',{x:X(600)+4,y:cy+ch-6,class:'m'},sv).style.fill='var(--bad)';
+    pts=[];for(let s=600;s<=upto;s+=10){const v=full?curve(s):curve(s)+1.6*Math.exp(-(s-600)/90);pts.push(`${X(s)},${Y(v)}`)}
+    el('polyline',{points:pts.join(' '),fill:'none',stroke:full?'var(--teal)':'var(--warm)','stroke-width':2},sv);
+    txt(full?'存全套：无缝接上':'只存模型：动量和学习率丢了，loss 先往上跳',{x:cx,y:cy+ch+22,class:'m'},sv);
+  }
+  txt('续训要存：model · opt · sched · step · RNG 状态（fp16 再加 GradScaler）',{x:60,y:300,class:'big'},sv);
+  txt('torch.load 默认 weights_only=True：只收纯数据，不执行存档里的代码',{x:60,y:330,class:'m'},sv);
+  txt('跨设备 map_location="cpu"；大模型 meta + assign=True；大文件 mmap=True',{x:60,y:355,class:'m'},sv);
+  $('npv').textContent=NP;$('tf').textContent='存档内容：'+(full?'全套':'只存模型');
+}
+function reset(){k=0;full=false;draw()}
+function next(){if(k<6){k++;draw();return true}if(!full){full=true;k=0;draw();return true}return false}
+$('np').oninput=e=>{NP=+e.target.value;draw()};
+$('tf').onclick=()=>{ANIM.stop();full=!full;k=6;draw()};
+setupPlayer({captureSeed:1,reset,next},900);
+</script></body></html>

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CPU 下单 GPU 排队</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 5 章 · CPU 下单、GPU 排队</h1>
+<p class="sub">配套讲义：<a href="../lessons/05-cuda-semantics.html">第 5 章 · GPU 语义：下单就走、何时会等、显存怎么借</a>。每个训练步 CPU 下 4 张单（前向、反向、更新、清零），每张单 GPU 要做一会儿。时间单位是编的，只看形状。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><button id="ti"></button></div>
+<p class="note">看点：① 不调 .item() 时 CPU 一路往前下单，GPU 方块首尾相接；② 每步末尾调 .item()，CPU 要等 GPU 做完（红色），GPU 又要等 CPU 下一单，时间线上出现空隙；③ 对比右下角 GPU 忙碌占比和 4 步总用时。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let item=true,k=0;
+const OPS=[['前向',1.4],['反向',2.2],['更新',0.6],['清零',0.2]];
+const LAUNCH=0.35,READ=0.3,STEPS=4;
+function sched(useItem){
+  let c=0,g=0;const cpu=[],gpu=[];
+  for(let s=0;s<STEPS;s++){
+    for(const [n,d] of OPS){
+      cpu.push({s,t0:c,t1:c+LAUNCH,kind:'launch',n});c+=LAUNCH;
+      const st=Math.max(g,c);gpu.push({s,t0:st,t1:st+d,n});g=st+d;
+    }
+    if(useItem){cpu.push({s,t0:c,t1:g,kind:'wait'});c=Math.max(c,g);cpu.push({s,t0:c,t1:c+READ,kind:'read'});c+=READ;}
+  }
+  return {cpu,gpu,end:Math.max(c,g),busy:gpu.reduce((a,b)=>a+b.t1-b.t0,0)};
+}
+function draw(){
+  clear(sv);
+  const S=sched(item),T=Math.max(sched(true).end,sched(false).end);
+  const X=t=>70+t/T*590;
+  txt(item?'每步末尾 print(loss.item())：CPU 要等 GPU 做完才拿到数':'不在循环里拿数：CPU 一路往前下单',{x:340,y:26,'text-anchor':'middle',class:'cap'},sv);
+  txt('CPU',{x:20,y:105,class:'big'},sv);txt('GPU',{x:20,y:215,class:'big'},sv);
+  el('line',{x1:70,y1:130,x2:660,y2:130,stroke:'var(--line)'},sv);el('line',{x1:70,y1:240,x2:660,y2:240,stroke:'var(--line)'},sv);
+  const COL={'前向':'var(--accent)','反向':'var(--purple)','更新':'var(--teal)','清零':'var(--amber)'};
+  S.cpu.filter(b=>b.s<k).forEach(b=>{
+    if(b.t1-b.t0<1e-6)return;
+    const f=b.kind==='wait'?'var(--bad)':b.kind==='read'?'var(--muted)':COL[b.n];
+    el('rect',{x:X(b.t0),y:85,width:Math.max(X(b.t1)-X(b.t0)-1,1),height:40,rx:3,fill:f,opacity:b.kind==='launch'?.55:.9},sv);
+    if(b.kind==='wait'&&X(b.t1)-X(b.t0)>34)txt('等',{x:(X(b.t0)+X(b.t1))/2,y:110,'text-anchor':'middle',class:'m'},sv).style.fill='#fff';
+  });
+  S.gpu.filter(b=>b.s<k).forEach(b=>{
+    el('rect',{x:X(b.t0),y:195,width:Math.max(X(b.t1)-X(b.t0)-1,1),height:40,rx:3,fill:COL[b.n]},sv);
+  });
+  // gaps
+  const g=S.gpu.filter(b=>b.s<k);
+  for(let i=1;i<g.length;i++)if(g[i].t0-g[i-1].t1>0.05){
+    const r=el('rect',{x:X(g[i-1].t1),y:192,width:X(g[i].t0)-X(g[i-1].t1),height:46,fill:'none',stroke:'var(--bad)','stroke-dasharray':'3 3'},sv);
+  }
+  // legend
+  let lx=70;OPS.forEach(([n])=>{el('rect',{x:lx,y:268,width:14,height:14,fill:COL[n]},sv);txt(n,{x:lx+20,y:280,class:'m'},sv);lx+=80});
+  el('rect',{x:lx,y:268,width:14,height:14,fill:'var(--bad)'},sv);txt('CPU 等 GPU',{x:lx+20,y:280,class:'m'},sv);
+  txt('CPU 淡色块 = 下单（kernel launch）；GPU 实色块 = 真正计算；红色虚框 = GPU 空等',{x:70,y:305,class:'m'},sv);
+  if(k>=STEPS){
+    const sub=sched(item);
+    txt(`4 步总用时 ${sub.end.toFixed(1)}，GPU 忙碌占比 ${(sub.busy/sub.end*100).toFixed(0)}%`,{x:70,y:350,class:'big'},sv);
+    const o=sched(!item);
+    txt(`（${item?'不':''}调 .item() 时：总用时 ${o.end.toFixed(1)}，占比 ${(o.busy/o.end*100).toFixed(0)}%）`,{x:70,y:375,class:'m'},sv);
+  }else txt(`已画出 ${k} / ${STEPS} 步`,{x:70,y:350,class:'m'},sv);
+  $('ti').textContent='每步 loss.item()：'+(item?'开':'关');
+}
+function reset(){k=0;draw()}
+function next(){if(k>=STEPS)return false;k++;draw();return true}
+$('ti').onclick=()=>{item=!item;draw()};
+setupPlayer({captureSeed:1,reset,next},1300);
+</script></body></html>

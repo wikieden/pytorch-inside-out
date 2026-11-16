@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>分派器标签梯子</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:13px}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 3 章 · 一次调用穿过标签梯子</h1>
+<p class="sub">配套讲义：<a href="../lessons/03-dispatcher.html">第 3 章 · 分派器：按标签一层层处理</a>。<code>x @ w</code> 从上往下落，每层做完自己的事，划掉自己的标签，再交给下一层。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><button id="ta"></button><button id="tg"></button><button id="td"></button></div>
+<p class="note">看点：① autocast 开时先转 bf16，转换这一步也会被记账（ToCopyBackward0）；② w 不要梯度时记账员只"看一眼"就放行；③ Meta 厨房只算形状不算数。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let k=0,ac=true,grad=true,dev=0;
+const DEV=['CPU','MPS','Meta'];
+const L=[
+  {key:()=>'Autocast'+(dev===2?'—':DEV[dev]),who:'混合精度员'},
+  {key:()=>'Autograd'+DEV[dev],who:'记账员'},
+  {key:()=>'ADInplaceOrView',who:'版本登记员'},
+  {key:()=>'Python',who:'张量子类（这里没有）'},
+  {key:()=>DEV[dev],who:'厨房'}];
+function act(i){
+  if(i===0)return dev===2?['Meta 张量没有 Autocast 标签，跳过',false]:ac?['matmul 在低精度名单里：x、w 转成 bf16',true]:['没开 autocast：放行',false];
+  if(i===1)return grad?['w 要梯度：记一笔 MmBackward0'+(ac&&dev!==2?'（上游接 ToCopyBackward0）':''),true]:['看一眼：没有输入要梯度 → 放行',false];
+  if(i===2)return ['不是原地修改、不是 view：放行',false];
+  if(i===3)return ['不是张量子类：穿透',false];
+  return dev===2?['只算输出形状 (2, 4)，不算数',true]:[`${DEV[dev]} 厨房做矩阵乘法`+(ac?'（bf16）':'（float32）'),true];
+}
+function draw(){
+  clear(sv);
+  const lx=30,lw=270,ly=i=>70+i*58;
+  const cur=k-1;
+  txt(k===0?'x @ w 准备进入分派器':k<=5?`第 ${k} 层：${L[k-1].who}`:'处理完毕，返回结果',{x:340,y:28,'text-anchor':'middle',class:'cap'},sv);
+  L.forEach((l,i)=>{
+    const done=i<cur,on=i===cur,y=ly(i);
+    const missing=i===0&&dev===2;
+    el('rect',{x:lx,y,width:lw,height:46,rx:8,fill:on?'var(--accent-bg)':'var(--bg)',stroke:on?'var(--accent)':'var(--line)','stroke-width':on?2:1,opacity:missing?.35:1},sv);
+    const t=txt(l.key(),{x:lx+12,y:y+20,class:'code'},sv);
+    txt(l.who,{x:lx+12,y:y+38,class:'m'},sv);
+    if(done||missing)el('line',{x1:lx+10,y1:y+16,x2:lx+12+l.key().length*8,y2:y+16,stroke:'var(--bad)','stroke-width':1.5},sv);
+    if(i<=cur){
+      const [s,busy]=act(i);
+      const a=txt(s,{x:lx+lw+14,y:y+28,class:'m'},sv);
+      if(busy)a.style.fill='var(--teal)';
+    }
+  });
+  if(cur>=0&&cur<5){
+    el('rect',{x:lx+lw-74,y:ly(cur)+10,width:62,height:26,rx:6,fill:'var(--amber)'},sv);
+    const c=txt('x @ w',{x:lx+lw-43,y:ly(cur)+28,'text-anchor':'middle',class:'code'},sv);c.style.fill='#fff';
+  }
+  if(k>=6){
+    el('line',{x1:30,y1:362,x2:650,y2:362,stroke:'var(--line)'},sv);
+    const dt=dev===2?'float32（meta，没有数）':(ac?'torch.bfloat16':'torch.float32');
+    txt(`y.dtype = ${dt}`,{x:30,y:386,class:'code'},sv);
+    const g=txt(`y.grad_fn = ${grad?'<MmBackward0>':'None'}`,{x:360,y:386,class:'code'},sv);
+    g.style.fill=grad?'var(--teal)':'var(--bad)';
+  }
+  $('ta').textContent='autocast：'+(ac?'开':'关');
+  $('tg').textContent='w 要梯度：'+(grad?'是':'否');
+  $('td').textContent='设备：'+DEV[dev];
+}
+function reset(){k=0;draw()}
+function next(){if(k>=6)return false;k++;draw();return true}
+$('ta').onclick=()=>{ac=!ac;draw()};
+$('tg').onclick=()=>{grad=!grad;draw()};
+$('td').onclick=()=>{dev=(dev+1)%3;draw()};
+setupPlayer({captureSeed:1,reset,next},1500);
+</script></body></html>
