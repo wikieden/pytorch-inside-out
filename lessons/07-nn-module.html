@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 7 章 · nn.Module：一棵自动登记参数的积木树 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="7-nnmodule">第 7 章 · <code>nn.Module</code>：一棵自动登记参数的积木树</h1><p><a class="btn" href="../animations/07-module-tree.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：写模型为什么要继承 <code>nn.Module</code>？<code>model.parameters()</code> 怎么知道有哪些参数？<code>state_dict</code> 是什么？<code>train()</code> / <code>eval()</code> 到底切换了什么？hook 能干嘛？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/06-compile-stack.html">第 6 章 torch.compile</a> · 下一章：<a href="../lessons/08-dataloader.html">第 8 章 DataLoader</a><br />
+对应原文：00-overview.md §3；官方教程「Build the Neural Network」与 <code>torch.nn.Module</code> 文档（〔在线〕）；《深入浅出 PyTorch》第 5 章 模型定义（〔在线〕datawhalechina.github.io/thorough-pytorch）；本章输出在本机 torch 2.15.0 上跑过（代码见本章末尾"代码对照"）</p>
+<p>本章缩写：MLP = Multi-Layer Perceptron（多层 / 感知机，几层全连接叠起来）；fc = fully connected（全连接层）；BN = BatchNorm（批归一化）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="module-2026-11-14">第一步：继承 Module = 自动登记（2026-11-14）</h3>
+<p><strong>类比：公司组织架构。</strong> 公司（模型）下面有部门（子模块），部门下面有员工（参数）。新员工入职，HR 自动登记到花名册。你要发工资（更新参数）时，问 HR 要花名册就行，不用自己一个个找。</p>
+<p><code>nn.Module</code> 就是这个 HR。在 <code>__init__</code> 里把子模块或参数<strong>赋值给 <code>self.xxx</code></strong>，它就自动登记：</p>
+<pre><code class="language-python">class MLP(nn.Module):
+    def __init__(self):
+        super().__init__()                 # 必须先调，HR 才上岗
+        self.fc1 = nn.Linear(4, 8)
+        self.drop = nn.Dropout(0.5)
+        self.fc2 = nn.Linear(8, 3)
+    def forward(self, x):
+        return self.fc2(self.drop(F.relu(self.fc1(x))))
+
+m = MLP()
+[(n, tuple(p.shape)) for n, p in m.named_parameters()]
+# [('fc1.weight', (8, 4)), ('fc1.bias', (8,)), ('fc2.weight', (3, 8)), ('fc2.bias', (3,))]
+sum(p.numel() for p in m.parameters())    # 67
+</code></pre>
+<p><strong>数字演示</strong>：67 = fc1（4 × 8 + 8 = 40）+ fc2（8 × 3 + 3 = 27）。<code>nn.Linear(4, 8)</code> 的权重形状是 (8, 4)：输出维在前（计算是 <span class="arithmatex">\(y = xW^\top + b\)</span>）。</p>
+<p><strong>登记规则</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>会被登记吗</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>self.fc = nn.Linear(...)</code></td>
+<td>✓ 子模块</td>
+</tr>
+<tr>
+<td><code>self.w = nn.Parameter(torch.randn(3))</code></td>
+<td>✓ 参数（会被优化器更新）</td>
+</tr>
+<tr>
+<td><code>self.register_buffer("mask", t)</code></td>
+<td>✓ buffer（缓冲区：跟着模型走、会存盘，但不训练，比如 BN 的均值、因果 mask）</td>
+</tr>
+<tr>
+<td><code>self.layers = [nn.Linear(...), ...]</code>（普通 list）</td>
+<td>✗ <strong>不会登记</strong>！要用 <code>nn.ModuleList</code></td>
+</tr>
+<tr>
+<td><code>self.t = torch.randn(3)</code>（普通张量）</td>
+<td>✗ 不登记，不会跟着 <code>.to(device)</code> 搬</td>
+</tr>
+</tbody>
+</table>
+<p>普通 list 是最常见的坑：参数不进 <code>parameters()</code>，优化器看不到，<strong>训练时这几层根本不更新</strong>，也不报错。</p>
+<p><strong>调用模型要写 <code>m(x)</code>，不写 <code>m.forward(x)</code></strong>：<code>m(x)</code> 会先跑 hook（第四步）再调 <code>forward</code>；直接调 <code>forward</code> 会跳过它们（第 19 章 FSDP2 就靠 hook 工作）。</p>
+<p><strong>一句话</strong>：赋值给 <code>self</code> 的子模块和 <code>nn.Parameter</code> 会被自动登记；普通 list 不登记，要用 <code>ModuleList</code>。</p>
+<h3 id="state_dict2026-11-14">第二步：一棵树 + 一张清单（state_dict）（2026-11-14）</h3>
+<p>登记下来的东西组成一棵树，名字用点连起来：</p>
+<pre><code class="language-python">[n for n, _ in m.named_modules()]   # ['', 'fc1', 'drop', 'fc2']   ('' 是根)
+list(m.state_dict().keys())         # ['fc1.weight', 'fc1.bias', 'fc2.weight', 'fc2.bias']
+</code></pre>
+<p><strong>state_dict（状态字典）</strong> = "名字 → 张量"的清单，包含所有参数和 buffer。保存模型就是保存这张清单（第 10 章）。名字（叫 FQN，fully qualified name：完整限定名）就是在树上的路径，比如 <code>layers.3.attn.q_proj.weight</code>。</p>
+<p>一行做到很多事，全靠这棵树：</p>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>做什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>m.to("cuda")</code> / <code>m.to(torch.bfloat16)</code></td>
+<td>递归把所有参数和 buffer 搬过去 / 转类型</td>
+</tr>
+<tr>
+<td><code>m.parameters()</code></td>
+<td>交给优化器</td>
+</tr>
+<tr>
+<td><code>m.zero_grad()</code></td>
+<td>清所有梯度</td>
+</tr>
+<tr>
+<td><code>m.apply(fn)</code></td>
+<td>对每个子模块调一次 fn（常用来自定义初始化）</td>
+</tr>
+<tr>
+<td><code>m.requires_grad_(False)</code></td>
+<td>冻结整棵子树（微调时冻结骨干）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>一句话</strong>：模块组成一棵树，路径就是名字；state_dict 是"名字 → 张量"的清单，搬设备、转类型、存盘都是沿着树递归。</p>
+<h3 id="train-eval2026-11-14">第三步：<code>train()</code> / <code>eval()</code>——两种工作状态（2026-11-14）</h3>
+<p>有些层在训练和推理时行为不同，最典型的是 <strong>Dropout（随机丢弃）</strong> 和 <strong>BatchNorm</strong>。</p>
+<p><strong>Dropout</strong>：训练时随机把一部分数清零（防止过拟合），剩下的放大 <span class="arithmatex">\(\frac{1}{1-p}\)</span> 倍保持期望不变：</p>
+<pre><code class="language-python">torch.manual_seed(0)
+d = nn.Dropout(0.5); d.train()
+d(torch.ones(8))    # tensor([0., 0., 2., 0., 0., 0., 2., 2.])   ← 留下的变成 2 = 1/(1-0.5)；丢哪几个是随机的
+</code></pre>
+<p>推理时 Dropout 什么都不做。<code>model.eval()</code> 就是递归把每个子模块的 <code>training</code> 标志设为 False：</p>
+<pre><code class="language-python">m.train(); m(x); m(x)      # 两次输出不同（随机丢弃不一样）
+m.eval();  m(x); m(x)      # 两次输出相同
+</code></pre>
+<p><strong>BatchNorm</strong>：训练时用当前 batch 的均值方差，并更新 running mean（buffer）；<code>eval</code> 时用存下来的 running mean。忘了切 <code>eval</code>，推理结果会随 batch 变化。</p>
+<p><strong>注意</strong>：<code>eval()</code> <strong>不会</strong>关掉记账。推理要同时：</p>
+<pre><code class="language-python">model.eval()                     # 切换层的行为
+with torch.inference_mode():     # 关掉 autograd（第 3 章）
+    pred = model(x)
+</code></pre>
+<p><strong>一句话</strong>：<code>train/eval</code> 只切换 Dropout、BN 这类层的行为，不管梯度；推理要 <code>eval()</code> + <code>inference_mode()</code> 两样都做。</p>
+<h3 id="hook2026-11-14">第四步：hook——在模块进出口装探头（2026-11-14）</h3>
+<p><strong>hook（钩子）</strong> = 在某个模块前向（或反向）执行前后，自动调用你给的函数。不改模型代码就能看中间结果、改中间结果。</p>
+<pre><code class="language-python">h = m.fc1.register_forward_hook(lambda mod, inp, out: print(&quot;fc1 输出&quot;, tuple(out.shape)))
+m(x)          # 打印：fc1 输出 (1, 8)
+h.remove()    # 用完拆掉
+</code></pre>
+<p>常见用途：</p>
+<table>
+<thead>
+<tr>
+<th>用途</th>
+<th>用哪种 hook</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>看每层激活的大小、找 NaN</td>
+<td><code>register_forward_hook</code></td>
+</tr>
+<tr>
+<td>看每层梯度的大小</td>
+<td><code>register_full_backward_hook</code> 或张量的 <code>register_hook</code></td>
+</tr>
+<tr>
+<td>提取中间特征（迁移学习）</td>
+<td>forward hook 存下 <code>out</code></td>
+</tr>
+<tr>
+<td>框架功能：FSDP2 在前向前收集参数、DDP 在梯度算好时发通信</td>
+<td>框架自己注册的 hook（第 18、19 章）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>一句话</strong>：hook = 模块进出口的探头；调试看激活和梯度，分布式框架也靠它插入通信。</p>
+<h3 id="state_dict">动画演示：模块树与 state_dict</h3>
+<p><img alt="nn.Module 的模块树" src="../animations/07-module-tree.gif" /></p>
+<p>可交互版：<a href="../animations/07-module-tree.html">animations/07-module-tree.html</a>。开关：<strong>用 <code>nn.ModuleList</code> / 用普通 list</strong>。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>左边是模块树，从根 <code>MLP</code> 往下展开；每登记一个参数，右边 state_dict 清单多一行，参数计数器累加；</li>
+<li>切到"普通 list"：list 里的两层画成虚线，不进清单、不计数，优化器看不到；</li>
+<li>最后一帧点亮 <code>drop</code>：它没有参数，但受 <code>train/eval</code> 影响。</li>
+</ol>
+<h2 id="_2">练习与作答记录</h2>
+<p><strong>题 1</strong>：<code>nn.Linear(10, 5)</code> 有多少个参数？权重的形状是什么？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：下面的模型训练时，<code>blocks</code> 里的层会被更新吗？为什么？怎么改？</p>
+<pre><code class="language-python">class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.blocks = [nn.Linear(16, 16) for _ in range(4)]
+        self.head = nn.Linear(16, 2)
+</code></pre>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：一个带 Dropout 的模型，推理时忘了 <code>model.eval()</code>，会有什么现象？只写了 <code>model.eval()</code> 没写 <code>inference_mode()</code>，又会怎样？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_3">口诀</h2>
+<blockquote>
+<p>继承 Module 有 HR，赋给 self 自动登记；普通 list 不登记，要用 ModuleList；<br />
+模块成树、路径成名，state_dict 是名字到张量的清单；<br />
+train/eval 切层的行为，不管梯度；hook 是进出口的探头。</p>
+</blockquote>
+<h2 id="_4">本章复习卡片</h2>
+<ul>
+<li>P21（登记规则：子模块 / Parameter / buffer 会登记；普通 list、普通张量不会 → ModuleList；<code>nn.Linear(4, 8)</code> 权重 (8, 4)）</li>
+<li>P22（state_dict = FQN → 张量清单，含参数和 buffer；<code>.to</code> / <code>parameters</code> / <code>apply</code> 沿树递归）</li>
+<li>P23（train/eval 只切 Dropout、BN 行为；Dropout 训练时留下的放大 1/(1−p)；推理 = eval + inference_mode）</li>
+</ul>
+<h2 id="_5">附录 · 延伸阅读</h2>
+<h3 id="_6">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ 官方 <code>torch.nn.Module</code> 文档</td>
+<td><code>register_buffer</code>、<code>state_dict</code>、<code>apply</code>、hook 各方法（〔在线〕）</td>
+<td>本章每个 API 的完整参数</td>
+</tr>
+<tr>
+<td>★ 《深入浅出 PyTorch》</td>
+<td>第 5 章 模型定义（Sequential / ModuleList / ModuleDict）（〔在线〕）</td>
+<td>中文的三种容器对比</td>
+</tr>
+<tr>
+<td>CS336 a1 handout</td>
+<td>§3「Transformer 语言模型」各小节（<code>cs336-spring2025/materials/text/</code> 里的 assignment1 handout）</td>
+<td>不许用 <code>nn.Linear</code>，自己用 <code>nn.Parameter</code> 写 Linear / Embedding / RMSNorm，是本章最好的练习</td>
+</tr>
+<tr>
+<td>Srivastava et al. 2014「Dropout」</td>
+<td>§2 动机（〔在线〕JMLR）</td>
+<td>为什么训练时随机丢弃</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_7">数学原理</h3>
+<ul>
+<li><strong>Linear</strong>：<span class="arithmatex">\(y = xW^\top + b\)</span>，<span class="arithmatex">\(W \in \mathbb{R}^{d_{out} \times d_{in}}\)</span>，参数量 <span class="arithmatex">\(d_{in} d_{out} + d_{out}\)</span>。</li>
+<li><strong>Dropout 的期望不变</strong>：每个数以概率 <span class="arithmatex">\(1-p\)</span> 保留并乘 <span class="arithmatex">\(\frac{1}{1-p}\)</span>，期望 <span class="arithmatex">\(= (1-p) \cdot \frac{x}{1-p} = x\)</span>，所以推理时直接用 <span class="arithmatex">\(x\)</span>。</li>
+</ul>
+<h3 id="_8">公式 / 代码清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nn.Parameter</code> / <code>register_buffer</code></td>
+<td>要训练的 / 跟着走但不训练</td>
+</tr>
+<tr>
+<td><code>nn.Sequential</code> / <code>nn.ModuleList</code> / <code>nn.ModuleDict</code></td>
+<td>顺序调用 / 列表 / 字典容器</td>
+</tr>
+<tr>
+<td><code>named_parameters()</code> / <code>named_modules()</code> / <code>state_dict()</code></td>
+<td>遍历参数 / 遍历模块 / 清单</td>
+</tr>
+<tr>
+<td><code>train()</code> / <code>eval()</code> / <code>requires_grad_(False)</code></td>
+<td>切行为 / 冻结</td>
+</tr>
+<tr>
+<td><code>register_forward_hook</code> / <code>register_full_backward_hook</code></td>
+<td>前向 / 反向探头</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch07_nn_module.py</code>，配套测试 <code>tests/test_ch07_15.py</code>；同一章的 notebook：<code>notebooks/ch07_nn_module.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch07_nn_module.py   # 一步一步打印  
+uv run pytest tests/test_ch07_15.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 自动登记</td>
+<td>40 + 27</td>
+<td><code>count(MLP())</code></td>
+<td>67</td>
+</tr>
+<tr>
+<td>第一步 普通 list 不登记</td>
+<td>—</td>
+<td><code>count(PlainList())</code></td>
+<td>只剩 head 的 34 个</td>
+</tr>
+<tr>
+<td>第二步 模块树</td>
+<td>—</td>
+<td><code>named_modules()</code></td>
+<td>['', 'fc1', 'drop', 'fc2']</td>
+</tr>
+<tr>
+<td>第三步 Dropout</td>
+<td>留下的 × 1/(1−p)</td>
+<td><code>dropout_once()</code>（种子 0）</td>
+<td>[0, 0, 2, 0, 0, 0, 2, 2]</td>
+</tr>
+<tr>
+<td>第三步 train / eval</td>
+<td>—</td>
+<td><code>train_eval_repeat()</code></td>
+<td>(False, True)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">self.fc1 = nn.Linear(4, 8)               # 赋给 self：自动登记
+self.blocks = [nn.Linear(16, 16)]        # 普通 list：不登记！
+sum(p.numel() for p in m.parameters())   # 67
+m.eval(); m(x); m(x)                     # 两次一样
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong><code>nn.Linear(4, 8).weight</code> 是 (8, 4)</strong>：存的是转置，输出维在前。</li>
+<li><strong>普通 list 不报错</strong>：参数只是悄悄没进 <code>parameters()</code>，训练时那几层不更新。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把 <code>PlainList</code> 的 list 换成 <code>nn.ModuleList</code>，再数参数。</li>
+<li>换几个随机种子调 <code>dropout_once</code>，看每次丢的位置不同、但留下的都是 2。</li>
+</ul><nav class="pager"><a href="06-compile-stack.html">← 第 6 章 · eager 与 graph：torch.compile 里面的三道工序</a><a href="08-dataloader.html">第 8 章 · Dataset 与 DataLoader：给 GPU 备菜的流水线 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 10 章 · 保存与加载：存清单、不存对象，断点要存全 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="10">第 10 章 · 保存与加载：存清单、不存对象，断点要存全</h1><p><a class="btn" href="../animations/10-checkpoint.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：模型应该怎么存？为什么不建议 <code>torch.save(model)</code>？<code>weights_only</code> 防的是什么？断点续训除了参数还要存什么，一共多大？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/09-training-loop.html">第 9 章 训练循环</a> · 下一章：<a href="../lessons/11-shape-broadcast.html">第 11 章 形状与广播</a><br />
+对应原文：00-overview.md §3；官方教程「Saving and Loading Models」与 <code>torch.load</code> 文档（〔在线〕）；本章数字在本机 torch 2.15.0 上跑过</p>
+<p>本章缩写：ckpt = checkpoint（检查点 / 存档）；RNG = Random Number Generator（随机 / 数 / 生成器）；FQN = Fully Qualified Name（完整 / 限定 / 名）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="state_dict2026-11-14">第一步：存 state_dict，不存整个对象（2026-11-14）</h3>
+<p>第 7 章说过，state_dict 是"名字 → 张量"的清单。<strong>推荐的存法就是存这张清单</strong>：</p>
+<pre><code class="language-python">torch.save(model.state_dict(), &quot;model.pt&quot;)
+
+model = MLP()                                     # 先用代码把结构建出来
+model.load_state_dict(torch.load(&quot;model.pt&quot;))     # 再把数填进去
+</code></pre>
+<p><strong>类比：搬家。</strong> 存 state_dict 像拍下每个抽屉里放了什么（清单）；到了新家先按图纸打好柜子（代码建模型），再照清单放东西。<code>torch.save(model)</code> 像把整个柜子连同"柜子是哪家工厂哪个型号"一起打包：到了新家如果那家工厂改了型号（你改了类名、挪了文件），柜子就拆不开了。</p>
+<p><code>load_state_dict</code> 默认严格对名字（<code>strict=True</code>）：</p>
+<pre><code class="language-python">model.load_state_dict(sd)                  # &lt;All keys matched successfully&gt;
+sd.pop(&quot;fc2.bias&quot;)
+model.load_state_dict(sd, strict=False)    # _IncompatibleKeys(missing_keys=['fc2.bias'], unexpected_keys=[])
+</code></pre>
+<p><code>strict=False</code> 不报错，但会<strong>返回</strong>缺了谁、多了谁。微调换了输出头时常用它，但一定要看返回值，别让关键层悄悄没加载上。</p>
+<p><strong>一句话</strong>：存清单不存对象；加载时先建结构再填数，名字对不上看 missing / unexpected。</p>
+<h3 id="weights_only2026-11-14">第二步：<code>weights_only</code>——不让存档文件执行代码（2026-11-14）</h3>
+<p><code>torch.save</code> 底层用 Python 的 pickle（腌制，Python 的通用序列化格式）。pickle 有个危险特性：<strong>加载时可以执行任意代码</strong>。别人发来的 <code>.pt</code> 文件，加载一下就可能删你的文件。</p>
+<p>从 PyTorch 2.6 起，<code>torch.load</code> 默认 <code>weights_only=True</code>：只允许加载张量、数字、字符串、字典、列表这些"纯数据"，遇到别的东西就拒绝。</p>
+<p><strong>实测</strong>：存一个加载时会执行 <code>print</code> 的对象，再加载：</p>
+<pre><code class="language-python">torch.load(&quot;evil.pt&quot;)
+# UnpicklingError: Weights only load failed. ...
+</code></pre>
+<p>被挡住了。自己存的、确定安全的文件需要加载自定义对象时，才用 <code>weights_only=False</code>。</p>
+<p>另一个选择是 <strong>safetensors</strong> 格式（Hugging Face 推出）：文件里只有张量和一个 JSON 头，根本没有代码可执行，还能按需只读一部分（内存映射）。下载别人的模型时优先选 <code>.safetensors</code>。</p>
+<p><strong>一句话</strong>：pickle 能执行代码，<code>weights_only=True</code>（默认）只收纯数据；外来模型优先 safetensors。</p>
+<h3 id="2026-11-14">第三步：断点续训要存什么、有多大（2026-11-14）</h3>
+<p>训练跑了三天断了，想<strong>从断点接着跑、结果和没断过一样</strong>，只存模型参数不够：</p>
+<table>
+<thead>
+<tr>
+<th>要存的</th>
+<th>为什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>model.state_dict()</code></td>
+<td>参数</td>
+</tr>
+<tr>
+<td><code>opt.state_dict()</code></td>
+<td>AdamW 给每个参数记了两个"动量"（<code>exp_avg</code>、<code>exp_avg_sq</code>）和步数，丢了就等于重新热身</td>
+</tr>
+<tr>
+<td><code>sched.state_dict()</code></td>
+<td>学习率走到哪了</td>
+</tr>
+<tr>
+<td><code>step</code> / <code>epoch</code></td>
+<td>从第几步接着</td>
+</tr>
+<tr>
+<td>RNG 状态</td>
+<td><code>torch.get_rng_state()</code>、<code>torch.cuda.get_rng_state_all()</code>：保证 dropout、数据打乱接得上</td>
+</tr>
+<tr>
+<td>GradScaler（fp16 时）</td>
+<td>当前的缩放倍数</td>
+</tr>
+<tr>
+<td>数据位置</td>
+<td>读到哪个 batch（或用 step 推出来）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>数字演示</strong>（实测）：<code>nn.Linear(1000, 1000)</code>，约 100 万个 float32 参数：</p>
+<table>
+<thead>
+<tr>
+<th>内容</th>
+<th>大小</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>模型 state_dict</td>
+<td>4.0 MB（100 万 × 4 字节）</td>
+</tr>
+<tr>
+<td>AdamW state_dict</td>
+<td>8.0 MB（两份动量，各和参数一样大）</td>
+</tr>
+</tbody>
+</table>
+<p>所以 <strong>AdamW 存档 ≈ 参数的 3 倍</strong>。7B（70 亿）参数的模型，float32 存参数 28 GB，加 AdamW 共约 84 GB。大模型通常每几百步存一次，只保留最近几份。多卡时每张卡只存自己那一片（第 22 章 DCP）。</p>
+<pre><code class="language-python">torch.save({&quot;model&quot;: model.state_dict(), &quot;opt&quot;: opt.state_dict(), &quot;sched&quot;: sched.state_dict(),
+            &quot;step&quot;: step, &quot;rng&quot;: torch.get_rng_state()}, f&quot;ckpt_{step}.pt&quot;)
+</code></pre>
+<p><strong>一句话</strong>：续训要存模型 + 优化器 + 调度器 + 步数 + 随机数状态；AdamW 存档约是参数的 3 倍。</p>
+<h3 id="2026-11-14_1">第四步：加载的三个实用开关（2026-11-14）</h3>
+<table>
+<thead>
+<tr>
+<th>情况</th>
+<th>写法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>在 GPU 上存的，要在 CPU / Mac 上加载</td>
+<td><code>torch.load(path, map_location="cpu")</code></td>
+</tr>
+<tr>
+<td>模型很大，不想先随机初始化一遍再覆盖</td>
+<td>在 meta 上建结构（第 3 章），<code>load_state_dict(sd, assign=True)</code> 直接用存档里的张量</td>
+</tr>
+<tr>
+<td>文件很大，不想一次全读进内存</td>
+<td><code>torch.load(path, mmap=True)</code>：按需从硬盘读</td>
+</tr>
+</tbody>
+</table>
+<p><strong>存 view 的小坑</strong>：<code>torch.save</code> 存一个 view 时，会把它背后<strong>整个 storage</strong> 都存下来（第 2 章）。从一个大张量切一小块存盘，文件可能出奇地大；先 <code>.clone()</code> 就只存这一小块。</p>
+<p><strong>一句话</strong>：换设备用 map_location，大模型 meta + assign，大文件 mmap；存切片前先 clone。</p>
+<h3 id="_2">动画演示：一份完整存档里有什么</h3>
+<p><img alt="断点存档" src="../animations/10-checkpoint.gif" /></p>
+<p>可交互版：<a href="../animations/10-checkpoint.html">animations/10-checkpoint.html</a>。滑块调参数量；开关"只存模型 / 存全套"。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>左边柱子是存档的组成：模型参数、AdamW 两份动量、调度器和随机数（很小）；</li>
+<li>下面是训练曲线：第 600 步断了；"只存模型"时从断点重启，loss 先往上跳（优化器动量和学习率都丢了），"存全套"时曲线无缝接上；</li>
+<li>滑块改参数量，看存档大小按"参数 × 12 字节"增长。</li>
+</ol>
+<h2 id="_3">练习与作答记录</h2>
+<p><strong>题 1</strong>：同事用 <code>torch.save(model, "m.pt")</code> 存模型，半年后把模型类改了名字，加载失败。为什么？应该怎么存？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：一个 1.3B（13 亿）参数的模型，float32 参数 + AdamW 状态，存档大约多大？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：断点续训只存了 <code>model.state_dict()</code> 和步数，接着训会有什么问题？至少还要补存哪两样？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_4">口诀</h2>
+<blockquote>
+<p>存清单不存对象，先建结构再填数；<br />
+pickle 会执行代码，weights_only 只收纯数据；<br />
+续训存全套：模型、优化器、调度、步数、随机数，AdamW 存档三倍大。</p>
+</blockquote>
+<h2 id="_5">本章复习卡片</h2>
+<ul>
+<li>P31（存 state_dict 不存对象；strict=False 返回 missing / unexpected）</li>
+<li>P32（weights_only=True 默认：pickle 可执行代码；safetensors）</li>
+<li>P33（续训存什么；AdamW 存档 ≈ 参数 3 倍：1000×1000 Linear 4 MB + 8 MB）</li>
+</ul>
+<h2 id="_6">附录 · 延伸阅读</h2>
+<h3 id="_7">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ 官方教程「Saving and Loading Models」</td>
+<td>全文（〔在线〕）</td>
+<td>state_dict、checkpoint、跨设备加载</td>
+</tr>
+<tr>
+<td>★ <code>torch.load</code> 文档</td>
+<td><code>weights_only</code>、<code>mmap</code>、<code>map_location</code> 参数（〔在线〕）</td>
+<td>第二、四步</td>
+</tr>
+<tr>
+<td>safetensors 文档</td>
+<td>「Speed comparison」「Metadata parsing」（〔在线〕huggingface.co/docs/safetensors）</td>
+<td>为什么安全、为什么快</td>
+</tr>
+<tr>
+<td>Ultra-Scale Playbook</td>
+<td>§Weights/grads/optimizer states memory（<code>distributed-pretraining/materials/text/ultrascale-playbook.md</code> 第 270 行起）</td>
+<td>参数、梯度、优化器状态各占几倍（第 19、27 章再用）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">数学原理</h3>
+<ul>
+<li><strong>AdamW 状态</strong>：每个参数存一阶动量 <span class="arithmatex">\(m\)</span> 和二阶动量 <span class="arithmatex">\(v\)</span>，各一个 float32，所以优化器状态 <span class="arithmatex">\(= 2 \times 4 = 8\)</span> 字节 / 参数；加上参数本身 4 字节，存档 ≈ 12 字节 / 参数。</li>
+</ul>
+<h3 id="_9">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>torch.save(obj, path)</code> / <code>torch.load(path, weights_only=True)</code></td>
+<td>存 / 取</td>
+</tr>
+<tr>
+<td><code>load_state_dict(sd, strict=False, assign=False)</code></td>
+<td>填参数</td>
+</tr>
+<tr>
+<td><code>map_location="cpu"</code> / <code>mmap=True</code></td>
+<td>换设备 / 按需读</td>
+</tr>
+<tr>
+<td>存档 ≈ 12 字节 × 参数量</td>
+<td>float32 + AdamW</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_10">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch10_save_load.py</code>，配套测试 <code>tests/test_ch07_15.py</code>；同一章的 notebook：<code>notebooks/ch10_save_load.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch10_save_load.py   # 一步一步打印  
+uv run pytest tests/test_ch07_15.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 strict=False</td>
+<td>返回缺了谁</td>
+<td><code>strict_false()</code></td>
+<td>missing_keys=['1.bias']</td>
+</tr>
+<tr>
+<td>第二步 weights_only</td>
+<td>挡住会执行代码的存档</td>
+<td><code>weights_only_blocks()</code></td>
+<td>UnpicklingError</td>
+</tr>
+<tr>
+<td>第三步 存档大小</td>
+<td>参数 4 + AdamW 8 字节</td>
+<td><code>checkpoint_sizes()</code></td>
+<td>4.0 MB / 8.0 MB</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">torch.save(model.state_dict(), path)
+model.load_state_dict(torch.load(path))           # 默认 weights_only=True
+sd.pop(&quot;1.bias&quot;); m.load_state_dict(sd, strict=False)
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong><code>Evil.__reduce__</code> 就是攻击方式</strong>：pickle 加载时会调用它返回的函数，所以只加载可信文件。</li>
+<li><strong>AdamW 要先 step 一次才有状态</strong>：新建的优化器 <code>state</code> 是空的，存档很小。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把 <code>checkpoint_sizes(2000)</code>，看大小是不是变成约 4 倍。</li>
+<li>在 <code>checkpoint_sizes</code> 里换成 SGD（不带 momentum），看优化器存档多大。</li>
+</ul><nav class="pager"><a href="09-training-loop.html">← 第 9 章 · 训练循环：五行主干 + 三件护具</a><a href="11-shape-broadcast.html">第 11 章 · 形状与广播：从右往左对齐，1 可以拉伸 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 9 章 · 训练循环：五行主干 + 三件护具 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="9">第 9 章 · 训练循环：五行主干 + 三件护具</h1><p><a class="btn" href="../animations/09-training-step.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：一个训练步到底要写哪几行、顺序为什么不能乱？混合精度（autocast）、梯度裁剪、学习率调度分别加在哪、解决什么问题？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/08-dataloader.html">第 8 章 DataLoader</a> · 下一章：<a href="../lessons/10-save-load.html">第 10 章 保存与加载</a><br />
+对应原文：00-overview.md §3；官方教程「Optimizing Model Parameters」（〔在线〕）；CS336 a1 handout §4–§5（优化器、学习率调度、梯度裁剪、训练循环）；本章数字在本机 torch 2.15.0 上跑过（代码见本章末尾"代码对照"）</p>
+<p>本章缩写：SGD = Stochastic Gradient Descent（随机 / 梯度 / 下降）；MSE = Mean Squared Error（均方误差）；lr = learning rate（学习率）；AMP = Automatic Mixed Precision（自动 / 混合 / 精度）；fp16 / bf16 = 16 位浮点的两种格式（第 26 章）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="2026-11-14">第一步：五行主干（2026-11-14）</h3>
+<p>所有训练循环的骨架都是这五行：</p>
+<pre><code class="language-python">for x, y in loader:
+    pred = model(x)                 # ① 前向：算预测，同时记账（第 4 章）
+    loss = loss_fn(pred, y)         # ② 算 loss：一个数，越小越好
+    opt.zero_grad()                 # ③ 清掉上一步的梯度（第 4 章坑 1）
+    loss.backward()                 # ④ 反向：照账本算出每个参数的 .grad
+    opt.step()                      # ⑤ 更新：按 .grad 拧参数
+</code></pre>
+<p><strong>类比：投篮练习。</strong> ① 投一次 → ② 看偏了多少 → ③ 把上次的笔记擦掉 → ④ 分析这次手腕、手肘各该怎么调 → ⑤ 照着调。</p>
+<p><strong>顺序的讲究</strong>：</p>
+<ul>
+<li>③ 可以放在 ① 前面，也可以放在 ④ 前面，只要在 <code>backward</code> 之前就行；放到 ⑤ 后面也对（下一步之前清）。<strong>不能</strong>放在 ④ 和 ⑤ 之间（刚算的梯度就被清了）。</li>
+<li>④ 一定在 ⑤ 前面：先有梯度，才能更新。</li>
+</ul>
+<p><strong>数字演示</strong>：拟合 <span class="arithmatex">\(y = 3x + 1\)</span>（32 个点，<span class="arithmatex">\(x\)</span> 在 −1 到 1 之间），模型 <code>nn.Linear(1, 1)</code>，SGD，学习率 0.5，MSE loss（预测和答案差的平方的平均）：</p>
+<table>
+<thead>
+<tr>
+<th>步</th>
+<th>loss</th>
+<th>权重 w</th>
+<th>偏置 b</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>3.42</td>
+<td>1.06</td>
+<td>1.00</td>
+</tr>
+<tr>
+<td>1</td>
+<td>1.34</td>
+<td>1.75</td>
+<td>1.00</td>
+</tr>
+<tr>
+<td>2</td>
+<td>0.56</td>
+<td>2.19</td>
+<td>1.00</td>
+</tr>
+<tr>
+<td>5</td>
+<td>0.040</td>
+<td>2.78</td>
+<td>1.00</td>
+</tr>
+<tr>
+<td>10</td>
+<td>0.0005</td>
+<td>2.98</td>
+<td>1.00</td>
+</tr>
+<tr>
+<td>20</td>
+<td>0.0000</td>
+<td>3.00</td>
+<td>1.00</td>
+</tr>
+</tbody>
+</table>
+<p>（表里是每步更新<strong>之后</strong>的 w、b，loss 是更新<strong>之前</strong>算的。b 第一步就到了 1：因为 x 关于 0 对称，b 的梯度正好是 2 ×（b − 1），乘上学习率 0.5 一步到位。）</p>
+<p><strong>一句话</strong>：前向 → loss → 清梯度 → 反向 → 更新；清梯度只要在 backward 之前。</p>
+<h3 id="autocast2026-11-14">第二步：护具一——混合精度 autocast（2026-11-14）</h3>
+<p>float32（单精度）每个数 4 字节；bf16 每个数 2 字节，GPU 的 Tensor Core（张量核心，专门做低精度矩阵乘法的硬件）算它快好几倍。<strong>混合精度</strong> = 矩阵乘法这类"不怕精度低"的运算用 bf16，求和、softmax、loss 这类"怕精度低"的用 float32。</p>
+<pre><code class="language-python">with torch.autocast(device_type=&quot;cuda&quot;, dtype=torch.bfloat16):
+    pred = model(x)
+    loss = loss_fn(pred, y)
+loss.backward()            # backward 放在 autocast 外面
+opt.step()
+</code></pre>
+<p>谁用什么精度由第 3 章的 Autocast 层按名单决定，你不用管。<strong>参数本身还是 float32</strong>，优化器更新也是 float32，所以叫"混合"。</p>
+<p>fp16 还要多一样东西 <code>GradScaler</code>（防止小梯度在 fp16 里变成 0），bf16 不用。现在 A100 以后的卡都首选 bf16。第 26 章细讲。</p>
+<p><strong>一句话</strong>：autocast 包住前向和 loss，矩阵乘法走 bf16、敏感运算留 float32；参数和更新仍是 float32。</p>
+<h3 id="2026-11-14_1">第三步：护具二——梯度裁剪（2026-11-14）</h3>
+<p>偶尔某一步的梯度特别大（比如碰到一个怪样本），一步就把参数拧飞，loss 变成 NaN（Not a Number，非数）。<strong>梯度裁剪</strong>：把所有参数的梯度拼成一个大向量，算它的长度（范数），超过上限就<strong>等比例缩小</strong>到上限。</p>
+<pre><code class="language-python">loss.backward()
+torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)   # 放在 backward 和 step 之间
+opt.step()
+</code></pre>
+<p><strong>数字演示</strong>：梯度是 [3, 4]，长度 <span class="arithmatex">\(\sqrt{3^2 + 4^2} = 5\)</span>，上限 1 → 缩小 5 倍：</p>
+<pre><code class="language-python">p.grad = torch.tensor([3., 4.])
+clip_grad_norm_([p], 1.0)       # 返回 5.0（裁剪前的长度）
+p.grad                          # tensor([0.6000, 0.8000])
+</code></pre>
+<p>方向不变，只缩长度。返回值是裁剪前的范数，<strong>值得每隔几步记进日志</strong>：它突然变大往往是训练要出问题的前兆。</p>
+<p><strong>一句话</strong>：梯度太长就等比例缩到上限，方向不变；放在 backward 和 step 之间，裁剪前的范数记日志。</p>
+<h3 id="2026-11-14_2">第四步：护具三——学习率调度（2026-11-14）</h3>
+<p>学习率太大会冲过头，太小走得慢。实践里学习率<strong>随步数变化</strong>，大模型最常用的是 <strong>warmup + cosine（预热 + 余弦衰减）</strong>：</p>
+<ul>
+<li>前 W 步从 0 线性升到最大值（刚开始参数是随机的、梯度方向乱，小步走稳一点）；</li>
+<li>之后按余弦曲线慢慢降到 0（后期精调）。</li>
+</ul>
+<p><strong>数字演示</strong>：最大 lr = 3e-4，W = 100，总步数 1000：</p>
+<table>
+<thead>
+<tr>
+<th>步</th>
+<th>0</th>
+<th>50</th>
+<th>100</th>
+<th>550</th>
+<th>1000</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>lr</td>
+<td>0</td>
+<td>1.5e-4</td>
+<td>3.0e-4</td>
+<td>1.5e-4</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>550 是衰减段的正中间，余弦正好降到一半。用 <code>LambdaLR</code> 最灵活：</p>
+<pre><code class="language-python">def lr_at(s):
+    if s &lt; W: return s / W                                    # 返回&quot;最大值的几倍&quot;
+    return 0.5 * (1 + math.cos(math.pi * (s - W) / (T - W)))
+sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_at)
+# 每步：opt.step(); sched.step()     ← sched 在 opt 之后
+</code></pre>
+<p><strong>一句话</strong>：学习率先线性升（warmup）再余弦降；<code>sched.step()</code> 放在 <code>opt.step()</code> 之后。</p>
+<h3 id="2026-11-14_3">第五步：拼成完整的一步（2026-11-14）</h3>
+<pre><code class="language-python">model.train()
+for step, (x, y) in enumerate(loader):
+    x, y = x.to(dev, non_blocking=True), y.to(dev, non_blocking=True)   # 第 8 章
+    with torch.autocast(device_type=dev, dtype=torch.bfloat16):          # 护具一
+        loss = loss_fn(model(x), y)
+    opt.zero_grad(set_to_none=True)
+    loss.backward()
+    gnorm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)     # 护具二
+    opt.step(); sched.step()                                             # 护具三
+    if step % 100 == 0:
+        print(step, loss.item(), gnorm.item(), sched.get_last_lr()[0])  # 同步点，少打
+</code></pre>
+<p><code>set_to_none=True</code>（现在是默认值）：把 <code>.grad</code> 设成 None 而不是填 0，省一次写显存。</p>
+<p><strong>梯度累积</strong>（显存只够小 batch、又想要大 batch 的效果）：每 k 个小 batch 才 <code>step</code> 一次，loss 先除以 k，其间不清零（利用第 4 章的"累加"）。</p>
+<p><strong>一句话</strong>：完整一步 = 搬数据 → autocast 前向 → 清梯度 → 反向 → 裁剪 → 更新 → 调度 → 偶尔记日志。</p>
+<h3 id="_2">动画演示：一步训练的流水线</h3>
+<p><img alt="训练循环一步" src="../animations/09-training-step.gif" /></p>
+<p>可交互版：<a href="../animations/09-training-step.html">animations/09-training-step.html</a>。滑块调学习率。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>左边是拟合 y = 3x + 1 的 32 个点和当前的直线，每步直线往答案靠一点；</li>
+<li>中间是五行代码，当前执行的一行高亮；</li>
+<li>右边是 loss 曲线；把学习率拖到 1.0 以上，看 loss 震荡甚至发散（冲过头）。</li>
+</ol>
+<h2 id="_3">练习与作答记录</h2>
+<p><strong>题 1</strong>：把 <code>opt.zero_grad()</code> 放到 <code>loss.backward()</code> 和 <code>opt.step()</code> 之间，会发生什么？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：梯度向量是 [6, 8]，<code>clip_grad_norm_(..., max_norm=2.0)</code> 之后梯度是多少？函数返回值是多少？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：最大 lr = 1e-3，warmup 200 步，总步数 2200，余弦衰减到 0。第 100 步、第 200 步、第 1200 步的学习率各是多少？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_4">口诀</h2>
+<blockquote>
+<p>前向、loss、清梯度、反向、更新；清梯度只要在反向前；<br />
+autocast 包前向，矩阵走 bf16；裁剪放在反向和更新之间，方向不变只缩长；<br />
+学习率先升后余弦降，调度跟在更新后。</p>
+</blockquote>
+<h2 id="_5">本章复习卡片</h2>
+<ul>
+<li>P27（五行主干与顺序；zero_grad 不能夹在 backward 和 step 之间）</li>
+<li>P28（autocast：包前向和 loss，backward 在外；参数与更新仍 float32；fp16 才需 GradScaler）</li>
+<li>P29（clip_grad_norm_：[3, 4] 上限 1 → [0.6, 0.8]，返回 5；放在 backward 与 step 之间）</li>
+<li>P30（warmup + cosine：3e-4、W = 100、T = 1000 → 第 50 / 100 / 550 / 1000 步 1.5e-4 / 3e-4 / 1.5e-4 / 0）</li>
+</ul>
+<h2 id="_6">附录 · 延伸阅读</h2>
+<h3 id="_7">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ CS336 a1 handout</td>
+<td>§4 优化器（AdamW 算法）、学习率调度（cosine with warmup 的公式）、梯度裁剪；§5 训练循环（<code>cs336-spring2025/materials/text/</code> 下 assignment1 handout）</td>
+<td>本章每一件护具都要在作业里自己实现，公式和本章一致</td>
+</tr>
+<tr>
+<td>★ 官方教程「Optimizing Model Parameters」</td>
+<td>全文（〔在线〕）</td>
+<td>五行主干的官方版</td>
+</tr>
+<tr>
+<td>官方文档 Automatic Mixed Precision</td>
+<td>"Typical Mixed Precision Training"（〔在线〕）</td>
+<td>autocast + GradScaler 的完整写法</td>
+</tr>
+<tr>
+<td>Loshchilov &amp; Hutter「SGDR」2016</td>
+<td>§3 余弦退火公式（〔在线〕arXiv:1608.03983）</td>
+<td>cosine 调度的出处</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">数学原理</h3>
+<ul>
+<li><strong>SGD</strong>：<span class="arithmatex">\(\theta \leftarrow \theta - \eta \nabla_\theta L\)</span>。</li>
+<li><strong>MSE</strong>：<span class="arithmatex">\(L = \frac{1}{N}\sum_i (\hat y_i - y_i)^2\)</span>；对偏置的梯度 <span class="arithmatex">\(\frac{2}{N}\sum_i(\hat y_i - y_i)\)</span>。<span class="arithmatex">\(x\)</span> 对称时 <span class="arithmatex">\(\sum x_i = 0\)</span>，所以 <span class="arithmatex">\(\partial L/\partial b = 2(b - 1)\)</span>，学习率 0.5 时一步到 1。</li>
+<li><strong>梯度裁剪</strong>：<span class="arithmatex">\(g \leftarrow g \cdot \min\!\left(1, \frac{c}{\lVert g \rVert_2}\right)\)</span>。</li>
+<li><strong>warmup + cosine</strong>：<span class="arithmatex">\(\eta_t = \eta_{\max} \frac{t}{W}\)</span>（<span class="arithmatex">\(t &lt; W\)</span>）；<span class="arithmatex">\(\eta_t = \frac{\eta_{\max}}{2}\left(1 + \cos\frac{\pi (t - W)}{T - W}\right)\)</span>（<span class="arithmatex">\(t \ge W\)</span>）。</li>
+</ul>
+<h3 id="_9">公式 / 代码清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>opt.zero_grad(set_to_none=True)</code> → <code>loss.backward()</code> → <code>opt.step()</code></td>
+<td>主干</td>
+</tr>
+<tr>
+<td><code>torch.autocast(device_type, dtype=torch.bfloat16)</code></td>
+<td>混合精度</td>
+</tr>
+<tr>
+<td><code>torch.amp.GradScaler("cuda")</code></td>
+<td>fp16 才需要</td>
+</tr>
+<tr>
+<td><code>clip_grad_norm_(params, max_norm)</code></td>
+<td>裁剪，返回裁剪前范数</td>
+</tr>
+<tr>
+<td><code>LambdaLR(opt, f)</code>；<code>sched.step()</code> 在 <code>opt.step()</code> 后</td>
+<td>调度</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_10">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch09_training_loop.py</code>，配套测试 <code>tests/test_ch07_15.py</code>；同一章的 notebook：<code>notebooks/ch09_training_loop.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch09_training_loop.py   # 一步一步打印  
+uv run pytest tests/test_ch07_15.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 拟合 y = 3x + 1</td>
+<td>五行主干</td>
+<td><code>fit_line()</code></td>
+<td>步 0 loss 3.42、步 20 w = 3.000、b = 1.000</td>
+</tr>
+<tr>
+<td>第三步 裁剪</td>
+<td>[3, 4] 缩到长度 1</td>
+<td><code>clip_demo()</code></td>
+<td>返回 5，梯度 [0.6, 0.8]</td>
+</tr>
+<tr>
+<td>第四步 warmup + cosine</td>
+<td>第 0/50/100/550/1000 步</td>
+<td><code>scheduler_lrs()</code></td>
+<td>0、1.5e-4、3e-4、1.5e-4、0</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">loss = F.mse_loss(m(X), Y)
+opt.zero_grad(); loss.backward(); opt.step()
+torch.nn.utils.clip_grad_norm_([p], 1.0)          # 返回裁剪前的范数
+LambdaLR(opt, lambda s: warmup_cosine(s) / base)  # 返回&quot;最大值的几倍&quot;
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong><code>LambdaLR</code> 的函数返回倍数，不是学习率本身</strong>：所以要除以 base。</li>
+<li><strong>裁剪后是 0.5999999 而不是 0.6</strong>：浮点误差，测试用容差比较。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把 <code>fit_line(lr=1.2)</code>，看 loss 是不是开始震荡。</li>
+<li>把 <code>clip_demo</code> 的上限改成 10，看梯度还变不变。</li>
+</ul><nav class="pager"><a href="08-dataloader.html">← 第 8 章 · Dataset 与 DataLoader：给 GPU 备菜的流水线</a><a href="10-save-load.html">第 10 章 · 保存与加载：存清单、不存对象，断点要存全 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 13 章 · 规约、矩阵乘与数值稳定 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="13">第 13 章 · 规约、矩阵乘与数值稳定</h1><p><a class="btn" href="../animations/13-numerics.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：<code>sum(dim=0)</code> 和 <code>sum(dim=1)</code> 到底沿哪个方向加？<code>@</code>、<code>bmm</code>、<code>einsum</code> 怎么选，一次矩阵乘法要算多少次？为什么直接算 <code>log(sum(exp(x)))</code> 会得到 inf，<code>logsumexp</code> 是怎么躲过去的？为什么 bf16 一路累加 1000 个 1 只得到 256？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/12-index-scatter.html">第 12 章 索引与散射</a> · 下一章：<a href="../lessons/14-functional-attention.html">第 14 章 nn.functional</a><br />
+对应原文：00-overview.md §4.4–§4.5；Transformer 讲义 第 6 章 softmax、第 7 章 饱和；Ultra-Scale Playbook §Mixed Precision Training（<code>distributed-pretraining/materials/text/ultrascale-playbook.md</code> 第 2821 行起）；本章输出在本机 torch 2.15.0 上跑过</p>
+<p>本章缩写：FLOP = FLoating-point OPeration（浮点 / 运算，一次加法或乘法）；einsum = Einstein summation（爱因斯坦 / 求和约定）；bmm = batch matrix multiply（批量矩阵乘）；inf = infinity（无穷大）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="dim-2026-11-14">第一步：<code>dim</code> 是"被压扁的那一维"（2026-11-14）</h3>
+<p><strong>规约（reduction）</strong> = 很多个数并成一个数：求和、均值、最大值……关键是 <code>dim</code> 参数。</p>
+<p><strong>记法：<code>dim=k</code> 就是把第 k 维压扁（消失）。</strong></p>
+<pre><code class="language-python">t = torch.tensor([[1., 2., 3.],
+                  [4., 5., 6.]])        # 形状 (2, 3)
+t.sum(0)          # tensor([5., 7., 9.])   ← 第 0 维（行方向，2 个）被压扁，剩 3 个
+t.sum(1)          # tensor([ 6., 15.])     ← 第 1 维（列方向，3 个）被压扁，剩 2 个
+t.sum(1, keepdim=True).shape   # (2, 1)   ← 压成 1 但保留位置（第 11 章第二步）
+t.max(-1)         # values=[3., 6.], indices=[2, 2]   ← max 同时给值和位置
+</code></pre>
+<p><code>dim=-1</code> 表示最后一维。深度学习里绝大多数规约都在最后一维（每个 token 自己的特征）上做：<code>softmax(-1)</code>、<code>mean(-1)</code>、LayerNorm。</p>
+<p><strong>一句话</strong>：dim 是被压扁的那一维；<code>keepdim=True</code> 保留位置方便广播回去。</p>
+<h3 id="2026-11-14">第二步：矩阵乘法的三种写法与它的计算量（2026-11-14）</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>形状</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>A @ B</code> / <code>torch.matmul</code></td>
+<td>(…, m, k) @ (…, k, n) → (…, m, n)</td>
+<td>最通用，前面的 batch 维按第 11 章广播</td>
+</tr>
+<tr>
+<td><code>torch.bmm(A, B)</code></td>
+<td>(b, m, k) @ (b, k, n)</td>
+<td>只接受恰好 3 维，不广播</td>
+</tr>
+<tr>
+<td><code>torch.einsum("bij,bjk-&gt;bik", A, B)</code></td>
+<td>同上</td>
+<td>用字母写清每一维，适合复杂收缩</td>
+</tr>
+</tbody>
+</table>
+<p><strong>einsum 怎么读</strong>：箭头左边每个输入一组字母，右边是输出。<strong>两边都出现的字母保留</strong>，<strong>只在左边出现的字母被求和掉</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>einsum</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"i,i-&gt;"</code></td>
+<td>点积：[1, 2, 3]·[4, 5, 6] = 32</td>
+</tr>
+<tr>
+<td><code>"ij-&gt;ji"</code></td>
+<td>转置</td>
+</tr>
+<tr>
+<td><code>"bhqd,bhkd-&gt;bhqk"</code></td>
+<td>每个头里 q 和 k 打分（d 被求和掉）＝ <span class="arithmatex">\(QK^\top\)</span></td>
+</tr>
+<tr>
+<td><code>"bij,bjk-&gt;bik"</code></td>
+<td>批量矩阵乘（实测和 <code>A @ B</code> 完全一致）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>计算量</strong>：(m, k) @ (k, n) 的结果有 <span class="arithmatex">\(m \times n\)</span> 个数，每个数是 <span class="arithmatex">\(k\)</span> 次乘法 + <span class="arithmatex">\(k\)</span> 次加法，共</p>
+<div class="arithmatex">\[\text{FLOPs} = 2mkn\]</div>
+<p>例：4096 × 4096 × 4096 → <span class="arithmatex">\(2 \times 4096^3 ≈ 1.37 \times 10^{11}\)</span>。第 5 章本机测得约 10 ms，就是约 13 TFLOP/s（每秒 13 万亿次）。第 23 章算 MFU 就是从这个式子出发。</p>
+<p><strong>一句话</strong>：<code>@</code> 最通用，einsum 用字母写清收缩；矩阵乘的计算量是 2mkn。</p>
+<h3 id="exp-logsumexp-2026-11-14">第三步：exp 会爆——logsumexp 的减最大值技巧（2026-11-14）</h3>
+<p>softmax 和交叉熵里要算 <span class="arithmatex">\(\log \sum_i e^{x_i}\)</span>。直接算：</p>
+<pre><code class="language-python">big = torch.tensor([1000., 1001., 1002.])
+torch.exp(big).sum().log()      # tensor(inf)     ← e^1000 超出 float32 范围（约 3.4 × 10^38）
+torch.logsumexp(big, 0)         # tensor(1002.4076)
+</code></pre>
+<p><strong>技巧</strong>：先把最大值 <span class="arithmatex">\(M\)</span> 提出来。</p>
+<div class="arithmatex">\[\log \sum_i e^{x_i} = M + \log \sum_i e^{x_i - M}\]</div>
+<p>读法：M 加上"每个数减去 M 之后的 exp 和"的 log。减完以后最大的那一项是 <span class="arithmatex">\(e^0 = 1\)</span>，其余都 ≤ 1，不会爆。</p>
+<p><strong>数字演示</strong>：<span class="arithmatex">\(M = 1002\)</span>，<span class="arithmatex">\(x - M = [-2, -1, 0]\)</span>，<span class="arithmatex">\(e^{-2} + e^{-1} + e^0 = 0.135 + 0.368 + 1 = 1.503\)</span>，<span class="arithmatex">\(\log 1.503 = 0.4076\)</span>，结果 <span class="arithmatex">\(1002 + 0.4076 = 1002.4076\)</span> ✓。</p>
+<p><code>torch.softmax</code> 内部也做了同样的减法，所以 <code>torch.softmax(big, 0)</code> 直接得到 <code>[0.0900, 0.2447, 0.6652]</code>，不会出 NaN。<strong>自己手写 softmax 时一定要先减最大值</strong>（Transformer 第 7 章讲过为什么分数会很大）。第 21 章的 online softmax / FlashAttention 也是这个技巧的延伸。</p>
+<p><strong>一句话</strong>：<span class="arithmatex">\(\log\sum e^x = M + \log\sum e^{x-M}\)</span>；减掉最大值再 exp 就不会爆。</p>
+<h3 id="2026-11-14_1">第四步：低精度累加会"加不动"（2026-11-14）</h3>
+<p>bf16 只有 8 位有效数字（二进制），大约能分辨 <strong>2–3 位十进制有效数字</strong>。当累加和变大以后，再加一个小数，可能<strong>小到被舍入掉</strong>。</p>
+<p><strong>实测</strong>：用 bf16 一个一个地加 1：</p>
+<pre><code class="language-python">s = torch.zeros((), dtype=torch.bfloat16)
+for _ in range(1000):
+    s = s + torch.tensor(1., dtype=torch.bfloat16)
+s          # tensor(256., dtype=torch.bfloat16)   ← 卡在 256！
+</code></pre>
+<p>为什么是 256：bf16 在 256 附近，相邻两个能表示的数之间差 2。256 + 1 = 257 在正中间，按"舍入到偶数"回到 256，于是再怎么加都是 256。</p>
+<p>而 <code>torch.ones(4096, dtype=torch.bfloat16).sum()</code> 得到 4096：PyTorch 的 sum kernel 内部<strong>用 float32 累加</strong>，最后才转回 bf16。</p>
+<p><strong>规矩</strong>：数据可以存成低精度，<strong>累加器（求和、矩阵乘的内部累加、softmax 的分母、loss、优化器状态）要用 float32</strong>。这正是第 9 章混合精度"敏感运算留 float32"、Tensor Core 用"bf16 输入、fp32 累加"的原因。fp16 还有另一个问题：最大只到 65504，<code>torch.tensor([1e4], dtype=torch.float16) * 10</code> 直接变 inf（第 26 章）。</p>
+<p><strong>一句话</strong>：低精度一路累加会"加不动"（bf16 加 1 卡在 256）；存可以低精度，累加要 float32。</p>
+<h3 id="logsumexp-bf16">动画演示：logsumexp 与 bf16 累加</h3>
+<p><img alt="数值稳定" src="../animations/13-numerics.gif" /></p>
+<p>可交互版：<a href="../animations/13-numerics.html">animations/13-numerics.html</a>。按钮切换"logsumexp"和"bf16 累加"两个场景。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>logsumexp：三根柱子是 <span class="arithmatex">\(e^{x_i}\)</span>，直接算时柱子冲出 float32 的上限（红线）；减去最大值后柱子都 ≤ 1；</li>
+<li>bf16 累加：横轴是加了几次，蓝线是 float32 累加（一路涨到 1000），橙线是 bf16 累加（到 256 变平）；</li>
+<li>放大 256 附近：bf16 能表示的数间隔是 2，257 被舍回 256。</li>
+</ol>
+<h2 id="_2">练习与作答记录</h2>
+<p><strong>题 1</strong>：<code>t</code> 形状 (4, 5, 6)。<code>t.sum(1)</code> 的形状是什么？<code>t.mean(-1, keepdim=True)</code> 呢？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：(B=8, T=1024, D=4096) 的输入乘 (4096, 4096) 的权重，一共多少 FLOPs？（可以写成 2 × … 的形式）</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：用减最大值的方法手算 <span class="arithmatex">\(\log(e^{10} + e^{10})\)</span>。（<span class="arithmatex">\(\log 2 ≈ 0.693\)</span>）</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_3">口诀</h2>
+<blockquote>
+<p>dim 是被压扁的那一维，keepdim 留位置；<br />
+矩阵乘算 2mkn，einsum 两边都有的留下、只在左边的求和；<br />
+logsumexp 先减最大，exp 就不爆；存可以低精度，累加要用 fp32。</p>
+</blockquote>
+<h2 id="_4">本章复习卡片</h2>
+<ul>
+<li>P41（dim = 被压扁的维；<code>[[1,2,3],[4,5,6]]</code> sum(0) = [5,7,9]，sum(1) = [6,15]）</li>
+<li>P42（einsum 读法；矩阵乘 FLOPs = 2mkn）</li>
+<li>P43（logsumexp：<span class="arithmatex">\(M + \log\sum e^{x-M}\)</span>；[1000, 1001, 1002] → 1002.4076；直接算 inf）</li>
+<li>P44（bf16 逐个加 1 卡在 256（间隔 2）；sum kernel 内部 fp32 累加；累加器用 fp32）</li>
+</ul>
+<h2 id="_5">附录 · 延伸阅读</h2>
+<h3 id="_6">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ Transformer 讲义</td>
+<td>第 6 章 softmax 与 exp、第 7 章 饱和</td>
+<td>为什么 exp 和大分数危险</td>
+</tr>
+<tr>
+<td>★ Ultra-Scale Playbook</td>
+<td>§Mixed Precision Training（<code>ultrascale-playbook.md</code> 第 2821 行起）</td>
+<td>fp32 / bf16 / fp16 / fp8 的位数和"累加用高精度"</td>
+</tr>
+<tr>
+<td>CUDA 讲义 第 21 章 online softmax</td>
+<td>全章</td>
+<td>减最大值技巧在融合 kernel 里怎么流式做</td>
+</tr>
+<tr>
+<td>Goldberg 1991「What Every Computer Scientist Should Know About Floating-Point Arithmetic」</td>
+<td>舍入误差一节（〔在线〕）</td>
+<td>浮点舍入的经典讲解</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_7">数学原理</h3>
+<ul>
+<li><strong>logsumexp 恒等式</strong>：<span class="arithmatex">\(\log\sum_i e^{x_i} = M + \log\sum_i e^{x_i - M}\)</span>，因为 <span class="arithmatex">\(e^{x_i} = e^M e^{x_i - M}\)</span>，提出 <span class="arithmatex">\(e^M\)</span> 后取 log 变成 <span class="arithmatex">\(+M\)</span>。</li>
+<li><strong>softmax 平移不变</strong>：<span class="arithmatex">\(\text{softmax}(x) = \text{softmax}(x - M)\)</span>。</li>
+<li><strong>bf16 的间隔</strong>：bf16 有 7 位尾数（加隐含位 8 位），在 <span class="arithmatex">\([2^e, 2^{e+1})\)</span> 区间内相邻数间隔 <span class="arithmatex">\(2^{e-7}\)</span>。256 = <span class="arithmatex">\(2^8\)</span>，间隔 <span class="arithmatex">\(2^{1} = 2\)</span>。</li>
+<li><strong>矩阵乘 FLOPs</strong>：<span class="arithmatex">\(2mkn\)</span>；Transformer 前向每个 token 约 <span class="arithmatex">\(2N\)</span> FLOPs（N 为参数量），训练约 <span class="arithmatex">\(6N\)</span>（第 23 章）。</li>
+</ul>
+<h3 id="_8">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>x.sum(dim, keepdim)</code> / <code>mean</code> / <code>max</code>（返回 values, indices）</td>
+<td>规约</td>
+</tr>
+<tr>
+<td><code>A @ B</code> / <code>bmm</code> / <code>einsum</code></td>
+<td>矩阵乘</td>
+</tr>
+<tr>
+<td><code>torch.logsumexp(x, dim)</code></td>
+<td>稳定的 log-sum-exp</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(2mkn\)</span></td>
+<td>矩阵乘计算量</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch13_reduce_matmul.py</code>，配套测试 <code>tests/test_ch07_15.py</code>；同一章的 notebook：<code>notebooks/ch13_reduce_matmul.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch13_reduce_matmul.py   # 一步一步打印  
+uv run pytest tests/test_ch07_15.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 dim</td>
+<td>压扁那一维</td>
+<td><code>reductions()</code></td>
+<td>[5, 7, 9]、[6, 15]、keepdim (2, 1)</td>
+</tr>
+<tr>
+<td>第二步 einsum / FLOPs</td>
+<td>2mkn</td>
+<td><code>einsum_checks()</code>、<code>matmul_flops</code></td>
+<td>点积 32；4096³ 是 1.37 × 10¹¹</td>
+</tr>
+<tr>
+<td>第三步 logsumexp</td>
+<td>M + log Σ e^{x−M}</td>
+<td><code>logsumexp_demo()</code></td>
+<td>直接算 inf，logsumexp 1002.4076</td>
+</tr>
+<tr>
+<td>第四步 bf16 累加</td>
+<td>间隔 2</td>
+<td><code>bf16_running_sum()</code></td>
+<td>逐个加卡在 256；sum 得 4096</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">torch.exp(big).sum().log()                # inf
+torch.logsumexp(big, 0)                   # 1002.4076
+s = s + one                               # bf16 逐个加：卡在 256
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong><code>t.max(-1)</code> 返回两样</strong>：<code>values</code> 和 <code>indices</code>，不是一个张量。</li>
+<li><strong><code>torch.sum</code> 对 bf16 不会卡住</strong>：kernel 内部用 float32 累加；卡住的是 Python 里一次次 <code>s + one</code>。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把 <code>bf16_running_sum</code> 改成 float16，看卡在多少。</li>
+<li><code>torch.logsumexp(torch.tensor([-1000., -1000.]), 0)</code>，再和直接算对比。</li>
+</ul><nav class="pager"><a href="12-index-scatter.html">← 第 12 章 · 索引与散射：按掩码挑、按下标取、按下标写回</a><a href="14-functional-attention.html">第 14 章 · nn.functional：归一化、激活与注意力 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

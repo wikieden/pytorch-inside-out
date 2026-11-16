@@ -1,0 +1,1166 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>pytorch-deep-dive · 复习卡片 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="index.html">PyTorch 从里到外</a>
+<a href="lessons/index.html">讲义目录</a>
+<a href="animations/index.html">动画</a>
+<a href="review.html">复习卡片</a>
+<a href="lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="pytorch-deep-dive">pytorch-deep-dive · 复习卡片</h1>
+<p>讲解中卡住、追问、答错的地方，以及必须记住的概念和 API，都会自动追加到这里。每张卡片的"来源"链接到 <a href="lessons/index.html">lessons/</a> 里对应的讲义章节，忘了就回去重读那一章。</p>
+<h2 id="_1">怎么用</h2>
+<ol>
+<li>先只看<strong>问题</strong>，自己说出或写出答案；</li>
+<li>再点开"答案"核对；</li>
+<li>答对了，在"复习记录"里补一个日期；答错了就当天再看一遍。</li>
+</ol>
+<p><strong>复习间隔</strong>（按答对的次数）：第 1 次 → 隔 1 天 → 隔 3 天 → 隔 7 天 → 隔 14 天 → 隔 30 天。连续答对 5 次的卡片移到文末"已掌握"。</p>
+<p>想复习时说一声"复习"，我会挑到期的卡片来考你。</p>
+<hr />
+<h2 id="16">核心机制（第 1–6 章）</h2>
+<h3 id="p01-numpy-x-wpytorch">P01 · numpy 也能算 <code>x @ w</code>，PyTorch 多做了哪两件大事？</h3>
+<p>来源：<a href="lessons/01-op-journey.html">第 1 章</a> · 加入 2026-11-05 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<ol>
+<li><strong>GPU 计算</strong>：张量放到 GPU（<code>.to("cuda")</code> / Mac 上 <code>.to("mps")</code>），同一行代码自动走 GPU 版本；</li>
+<li><strong>自动求导（autograd）</strong>：前向时把"怎么算出来的"记在账本上，<code>loss.backward()</code> 照着倒推每个参数的梯度。</li>
+</ol>
+<p>在这之上再有 <code>nn</code>、<code>optim</code>、<code>DataLoader</code>、<code>distributed</code>、<code>torch.compile</code> 等工具。</p>
+<p>口诀：numpy 只会炒，PyTorch 开餐厅：多个厨房，一个记账员。</p>
+</details>
+<h3 id="p02-y-x-w-pytorch">P02 · 一行 <code>y = x @ w</code> 在 PyTorch 里经过哪四站？分派器看什么？</h3>
+<p>来源：<a href="lessons/01-op-journey.html">第 1 章</a> · 加入 2026-11-05 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>① <strong>Python 前端</strong>（服务员）：接单，翻译成 C++；
+② <strong>分派器 Dispatcher</strong>（前台）：按张量身上的标签决定交给谁；
+③ <strong>Autograd</strong>（记账员）：有输入要梯度时记一笔（<code>grad_fn=&lt;MmBackward0&gt;</code>），否则放行；
+④ <strong>Kernel</strong>（厨房）：按设备选 CPU 或 GPU 实现真正去算。</p>
+<p>分派器按顺序看标签：先 Autograd（记不记账），再看设备（第 3 章细讲：标签一直在，没人要梯度时记账员只是放行）。</p>
+<p>口诀：服务员接单，前台看标签，记账员记一笔，厨房来下锅。</p>
+</details>
+<h3 id="p03-tensor-xi-j-storage">P03 · 一个 Tensor 里存了哪几样东西？<code>x[i, j]</code> 在 storage 里的位置怎么算？</h3>
+<p>来源：<a href="lessons/02-tensor-stride.html">第 2 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>storage（一排数）+ shape + stride（每维走一步跳几格）+ storage_offset + dtype + device（+ autograd 信息）。</p>
+<p>位置 = offset + i × stride₀ + j × stride₁。</p>
+<p>例：<code>x = torch.arange(6).view(2, 3)</code>，stride (3, 1)，<code>x[1, 2]</code> → 0 + 1×3 + 2×1 = 5。</p>
+<p>口诀：一排数加说明书：shape 几行几列，stride 一步跳几格，offset 从哪开始。</p>
+</details>
+<h3 id="p04-view-xtview6">P04 · view 和原张量是什么关系？为什么 <code>x.t().view(6)</code> 会报错，怎么办？</h3>
+<p>来源：<a href="lessons/02-tensor-stride.html">第 2 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>view 只改说明书（shape / stride / offset），<strong>和原张量共用 storage</strong>，改一个另一个也变。</p>
+<p><code>x.t()</code> 的 stride 是 (1, 3)，不是 shape (3, 2) 的标准 (2, 1)，不连续；按行读的顺序 0, 3, 1, 4, 2, 5 和 storage 顺序不同，光改说明书拉不成一行。</p>
+<p>办法：<code>x.t().reshape(6)</code>（必要时复制）或 <code>x.t().contiguous().view(6)</code>，结果 [0, 3, 1, 4, 2, 5]。</p>
+<p>口诀：view 只换说明书；转置跳着读不连续，view 不了就 reshape。</p>
+</details>
+<h3 id="p05-stride-0-expand-repeat">P05 · stride 为 0 是什么意思？<code>expand</code> 和 <code>repeat</code> 有什么区别？</h3>
+<p>来源：<a href="lessons/02-tensor-stride.html">第 2 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>stride 0：这一维走一步，内存一格不动，同一个数被"看"很多遍。</p>
+<p><code>b.expand(4, 3)</code>：stride (0, 1)，<strong>不复制</strong>；<code>b.repeat(4, 1)</code>：真复制出 12 个数，stride (3, 1)。广播就是靠 stride 0。</p>
+<p>口诀：stride 为 0 一份当多份；expand 假复制，repeat 真复制。</p>
+</details>
+<h3 id="p06-dispatch-keyredispatch">P06 · dispatch key（标签）的处理顺序是什么？redispatch 是什么？</h3>
+<p>来源：<a href="lessons/03-dispatcher.html">第 3 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>简化梯子：<strong>Autocast → Autograd → ADInplaceOrView →（Python，张量子类）→ 后端（CPU / CUDA / MPS / Meta）</strong>。</p>
+<p>每一层做完自己的事，把自己的标签从"待处理"里去掉，再叫一次分派器（redispatch），活就落到下一层。</p>
+<p>例：autocast 里 <code>x @ w</code>：先转 bf16（转换也被记账：ToCopyBackward0），再记 MmBackward0，最后 CPU 用 bf16 算。</p>
+<p>口诀：先混合精度，再记账，再版本登记，最后进厨房；每层干完撕标签。</p>
+</details>
+<h3 id="p07-autograd-inference_mode">P07 · 不要梯度的普通张量身上有没有 Autograd 标签？inference_mode 里新建的张量呢？</h3>
+<p>来源：<a href="lessons/03-dispatcher.html">第 3 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>普通 CPU / GPU 张量<strong>一直有</strong> Autograd 标签：<code>DispatchKeySet(CPU, ADInplaceOrView, AutogradCPU, AutocastCPU)</code>；记账员每次都被叫到，没有输入要梯度就放行。</p>
+<p>inference_mode 里新建的张量<strong>没有</strong> Autograd（和 ADInplaceOrView）标签：<code>DispatchKeySet(CPU, AutocastCPU)</code>，连"看一眼"都省了；代价是之后不能参与要求导的计算。</p>
+<p>口诀：标签一直在，没人要就放行；inference_mode 把记账员整个拿掉。</p>
+</details>
+<h3 id="p08-meta">P08 · Meta 设备是什么？举两个用处。</h3>
+<p>来源：<a href="lessons/03-dispatcher.html">第 3 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>Meta 设备的"厨房"只算输出形状、不分配内存也不算数。<code>torch.empty(10**6, 10**6, device="meta")</code> 名义 4 TB，<code>m @ m.T</code> 瞬间返回形状 (10⁶, 10⁶)。</p>
+<p>用处：① <code>torch.compile</code> / <code>torch.export</code> 抓图时推形状（fake tensor 同理）；② 大模型先 <code>with torch.device("meta"):</code> 建结构，再按分片真正分配（FSDP2、<code>load_state_dict(assign=True)</code>）。</p>
+<p>口诀：Meta 只算形状不算数。</p>
+</details>
+<h3 id="p09-z-wx-bl-z2x-2w-3b-1lwlb">P09 · z = w·x + b，L = z²，x = 2、w = 3、b = 1。∂L/∂w、∂L/∂b 各是多少？怎么来的？</h3>
+<p>来源：<a href="lessons/04-autograd.html">第 4 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>z = 7，L = 49。链式法则：∂L/∂z = 2z = 14；∂z/∂w = x = 2，∂z/∂b = 1。</p>
+<p>∂L/∂w = 14 × 2 = <strong>28</strong>；∂L/∂b = 14 × 1 = <strong>14</strong>。</p>
+<p>口诀：链式法则把每一小步的放大倍数乘起来。</p>
+</details>
+<h3 id="p10-backward-grad">P10 · 计算图（账本）是怎么建的、<code>backward</code> 怎么走？哪些张量有 <code>.grad</code>？</h3>
+<p>来源：<a href="lessons/04-autograd.html">第 4 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>前向时每个可导运算记一个节点（PowBackward0、AddBackward0、MulBackward0…），用 next_functions 连成 DAG；<strong>每次前向重建</strong>（define-by-run），所以 Python 的 if / for 随便写。</p>
+<p><code>backward()</code> 从 loss 出发倒着走，每个节点把上游梯度乘上本步的放大倍数往下传，最后由 AccumulateGrad <strong>加进叶子张量</strong>（自己创建的，如 w、b）的 <code>.grad</code>。中间结果（如 z）不是叶子，<code>.grad</code> 为 None。</p>
+<p>口诀：前向记节点，反向倒着走，结果存叶子。</p>
+</details>
+<h3 id="p11-zero_grad-backward">P11 · 为什么每步要 <code>zero_grad</code>？原地修改为什么会让 backward 报错？</h3>
+<p>来源：<a href="lessons/04-autograd.html">第 4 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>.grad</code> 是<strong>累加</strong>的：同一个图再反向一次，28 变 56。不清零就会把上一步的梯度叠上来（故意不清零就是梯度累积）。</p>
+<p>反向要用前向时的值（如 exp 的反向用它的输出）。每个张量有<strong>版本号</strong>，原地修改 +1；记账时存下版本号，反向时对不上就报 <code>modified by an inplace operation</code>。改成 <code>a = a + 1</code> 就行。</p>
+<p>口诀：<code>.grad</code> 只会加，每步要清零；反向要用的数别原地改。</p>
+</details>
+<h3 id="p12-torchautogradfunction">P12 · 怎么用 <code>torch.autograd.Function</code> 自定义反向？怎么检查写对了？</h3>
+<p>来源：<a href="lessons/04-autograd.html">第 4 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>继承 <code>torch.autograd.Function</code>，写两个静态方法：
+- <code>forward(ctx, x)</code>：算结果，<code>ctx.save_for_backward(...)</code> 存反向要用的东西；
+- <code>backward(ctx, grad_out)</code>：返回"上游梯度 × 本步放大倍数"，每个输入一个。</p>
+<p>例：ReLU 的反向 <code>grad_out * (x &gt; 0)</code>，输入 [−1, 2, 3] 得梯度 [0, 1, 1]。</p>
+<p>检查：<code>torch.autograd.gradcheck</code>（用 <strong>float64</strong>），和数值导数对拍。</p>
+<p>口诀：forward 存 ctx，backward 返回上游梯度乘本步倍数；gradcheck 用 float64。</p>
+</details>
+<h3 id="p13-gpu">P13 · 为什么不加同步直接掐表测不准 GPU 运算？怎么测才对？</h3>
+<p>来源：<a href="lessons/05-cuda-semantics.html">第 5 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>GPU 运算是<strong>异步</strong>的：CPU 把 kernel 挂进队列就返回。本机 MPS 实测 4096 矩阵乘：下单 0.15 ms，真正做完 10.2 ms。</p>
+<p>正确：计时前后 <code>torch.cuda.synchronize()</code>（Mac 上 <code>torch.mps.synchronize()</code>）或用 <code>torch.cuda.Event</code>；先热身；或直接用 <code>torch.utils.benchmark</code> / <code>triton.testing.do_bench</code>。</p>
+<p>口诀：CPU 挂单就走，GPU 排队慢做；掐表之前先同步。</p>
+</details>
+<h3 id="p14">P14 · 举出至少五种同步点。同步点为什么伤性能？</h3>
+<p>来源：<a href="lessons/05-cuda-semantics.html">第 5 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>.item()</code>、<code>.tolist()</code>、<code>float(t)</code>、<code>print(t)</code>、<code>.cpu()</code> / <code>.numpy()</code>、依赖张量值的 Python <code>if</code>、<code>nonzero</code> / <code>unique</code> / 布尔索引（输出大小看数据）、<code>torch.cuda.synchronize()</code>。</p>
+<p>伤性能：CPU 要等 GPU 队列清空才拿到数，之后才给下一步下单，GPU 就会空等一段；每步都有的话时间线上全是空隙。</p>
+<p>口诀：拿数回来就要等，item、print、if 都是坎。</p>
+</details>
+<h3 id="p15-stream-stream-non_blocking">P15 · stream 是什么？跨 stream 用数据要注意什么？non_blocking 拷贝要配合什么？</h3>
+<p>来源：<a href="lessons/05-cuda-semantics.html">第 5 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>一条 stream 是一条队列：同一条<strong>按顺序</strong>执行，不同条<strong>可以并行</strong>（如一边算这批、一边拷下一批；NCCL 通信也在单独 stream）。</p>
+<p>跨 stream 用数据前必须等：<code>wait_stream</code> 或 Event，否则可能读到没拷完的数。</p>
+<p><code>.to(dev, non_blocking=True)</code> 要配 <strong>pinned memory（锁页内存）</strong>，DataLoader 的 <code>pin_memory=True</code> 就是干这个。</p>
+<p>口诀：一条 stream 一条队，跨队用数先等待；non_blocking 配锁页内存。</p>
+</details>
+<h3 id="p16-memory_allocated-memory_reserved-nvidia-smi">P16 · <code>memory_allocated</code> 和 <code>memory_reserved</code> 有什么区别？为什么 nvidia-smi 显示的比张量实际用的多？</h3>
+<p>来源：<a href="lessons/05-cuda-semantics.html">第 5 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>PyTorch 有<strong>缓存分配器</strong>：张量释放后显存不还给驱动，留着复用（cudaMalloc 慢）。
+- <code>memory_allocated</code>：张量真正在用的；
+- <code>memory_reserved</code>：从驱动借来的总量（nvidia-smi 看到的接近这个）。</p>
+<p>差额不是泄漏。本机 MPS 实测：del 一个 64 MB 张量后"在用"从 128 降到 64 MB，"借来"仍约 1 GB。碎片多时设 <code>PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True</code>。</p>
+<p>口诀：显存仓库借了不还，在用和借来是两个数。</p>
+</details>
+<h3 id="p17-eager">P17 · eager 模式的两笔主要开销是什么？</h3>
+<p>来源：<a href="lessons/06-compile-stack.html">第 6 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>① 每个算子都要过一遍 Python 和分派器（几微秒），小算子时下单比计算还贵；
+② 不会合并：<code>(x.sin().cos() * 2).sum(-1)</code> 是 4 个 kernel，中间结果 t1、t2、t3 每个都写进显存再读出来，逐元素运算的时间几乎都花在这些读写上。</p>
+<p>口诀：eager 一步一单一趟显存。</p>
+</details>
+<h3 id="p18-torchcompile-guards">P18 · <code>torch.compile</code> 的三道工序是什么？guards 是什么？</h3>
+<p>来源：<a href="lessons/06-compile-stack.html">第 6 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>① <strong>TorchDynamo</strong>：旁听 Python 字节码，把张量运算抄成 FX 图，记下 guards；② <strong>AOTAutograd</strong>：提前生成反向图，前向 + 反向一起优化（还会 functionalize 去掉原地修改）；③ <strong>TorchInductor</strong>：融合并生成代码（GPU 上 Triton，CPU 上 C++）。</p>
+<p>guards：这份编好的代码适用条件（形状、dtype、设备…）的检查清单，下次调用全对就直接复用。</p>
+<p>实测：sin → cos → ×2 → sum 融成一个 <code>cpp_fused_cos_mul_sin_sum_0</code>。</p>
+<p>口诀：Dynamo 抄图，AOTAutograd 配反向，Inductor 融合写代码。</p>
+</details>
+<h3 id="p19-graph-break">P19 · 什么是 graph break（断图）？常见原因和改法？怎么查？</h3>
+<p>来源：<a href="lessons/06-compile-stack.html">第 6 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>Dynamo 抄不下去时把图切断，回 Python 执行再接着抄。代价：两段之间不能融合、可能同步。</p>
+<p>原因 → 改法：依赖张量值的 if / while → <code>torch.where</code>；print / <code>.item()</code> → 挪出去；不认识的库 → <code>torch.library</code> 注册成算子；输出大小依赖数据 → 固定形状 + mask。</p>
+<p>查：<code>torch._dynamo.explain(f)(x)</code>（实测带 if 的函数 graph_count 2、break 1）、<code>TORCH_LOGS=graph_breaks</code>、<code>fullgraph=True</code> 让断图直接报错。</p>
+<p>口诀：看张量的值走分支就断图，用 where 改。</p>
+</details>
+<h3 id="p20-mode">P20 · 什么时候会重编译？<code>mode</code> 的三个选项各适合什么？</h3>
+<p>来源：<a href="lessons/06-compile-stack.html">第 6 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>guards 不通过就重编译：形状变、dtype 变、train/eval 切换、读了会变的全局变量。实测长度 4 → 8 重编译一次，第二次编成<strong>动态形状</strong>，16 就直接复用。</p>
+<p><code>default</code>：融合 + 生成代码；<code>reduce-overhead</code>：再套 CUDA Graph，适合小 batch、推理 decode；<code>max-autotune</code>：对 matmul 等试多种实现挑最快，编译更久。</p>
+<p>口诀：guards 不过就重编，形状在变编成动态。</p>
+</details>
+<hr />
+<h2 id="710">典型用法（第 7–10 章）</h2>
+<h3 id="p21-nnmodule">P21 · nn.Module 会自动登记哪些东西？哪两种写法不会被登记？</h3>
+<p>来源：<a href="lessons/07-nn-module.html">第 7 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>赋给 <code>self</code> 的<strong>子模块</strong>、<code>nn.Parameter</code>、<code>register_buffer</code> 的 buffer 会登记。</p>
+<p>不登记：<strong>普通 Python list</strong> 里的层（要用 <code>nn.ModuleList</code>）、普通张量属性（不会跟着 <code>.to(device)</code>）。普通 list 不报错，只是那几层不进 <code>parameters()</code>、训练时不更新。</p>
+<p><code>nn.Linear(4, 8)</code> 的权重形状是 (8, 4)：输出维在前，参数 4×8 + 8 = 40。</p>
+<p>口诀：赋给 self 自动登记；普通 list 不登记，要用 ModuleList。</p>
+</details>
+<h3 id="p22-state_dict">P22 · state_dict 是什么？名字是怎么来的？</h3>
+<p>来源：<a href="lessons/07-nn-module.html">第 7 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>"名字 → 张量"的清单，包含所有参数和 buffer。名字（FQN）就是在模块树上的路径，如 <code>fc1.weight</code>、<code>layers.3.attn.q_proj.weight</code>。</p>
+<p><code>.to()</code>、<code>parameters()</code>、<code>zero_grad()</code>、<code>apply(fn)</code>、<code>requires_grad_(False)</code> 都是沿这棵树递归。</p>
+<p>口诀：模块成树、路径成名，state_dict 是名字到张量的清单。</p>
+</details>
+<h3 id="p23-modeleval-dropout">P23 · <code>model.eval()</code> 改变了什么、没改变什么？Dropout 训练时为什么要放大？</h3>
+<p>来源：<a href="lessons/07-nn-module.html">第 7 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>eval 递归把 <code>training</code> 设为 False：Dropout 不再丢、BatchNorm 用存下的统计量。<strong>它不关记账</strong>，推理还要 <code>torch.inference_mode()</code>。</p>
+<p>Dropout 训练时以概率 p 清零，留下的乘 1/(1−p)，使期望不变（p = 0.5 时留下的变成 2）；推理时直接用原值。</p>
+<p>口诀：train/eval 切层的行为，不管梯度；推理 eval 加 inference_mode。</p>
+</details>
+<h3 id="p24-dataloader-10-batch_size-4">P24 · DataLoader 内部的三步是什么？10 个样本、batch_size 4 会得到几批？</h3>
+<p>来源：<a href="lessons/08-dataloader.html">第 8 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>① sampler 出下标（shuffle 时打乱）；② 对每个下标调 <code>ds[i]</code>；③ collate 把一组样本拼成张量（默认 <code>torch.stack</code>）。</p>
+<p>10 个样本、每批 4：[4, 4, 2] 三批；<code>drop_last=True</code> 扔掉不满的，剩 2 批。</p>
+<p>口诀：Dataset 管第 i 个是什么，DataLoader 管打乱分批拼盘。</p>
+</details>
+<h3 id="p25-num_workers-gpu">P25 · num_workers 至少要多少 GPU 才不等数据？相关的几个参数各干什么？</h3>
+<p>来源：<a href="lessons/08-dataloader.html">第 8 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>worker 数 ≥ 读一批的时间 ÷ 训一步的时间。例：读 40 ms、训 25 ms → 至少 2 个；0 个时每步 65 ms，GPU 忙 38%。</p>
+<p><code>prefetch_factor</code> 每个 worker 提前备几批；<code>persistent_workers=True</code> epoch 间不关进程；<code>pin_memory=True</code> 放进锁页内存，配 <code>.to(..., non_blocking=True)</code>。</p>
+<p>口诀：worker 数 ≥ 读一批 ÷ 训一步。</p>
+</details>
+<h3 id="p26-dataloader">P26 · 样本长短不一时 DataLoader 为什么报错、怎么办？多卡时数据怎么分？</h3>
+<p>来源：<a href="lessons/08-dataloader.html">第 8 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>默认 collate 用 <code>torch.stack</code>，要求形状一样。自己写 <code>collate_fn</code>：<code>pad_sequence(..., batch_first=True)</code> 补齐，并返回 <strong>mask</strong> 标出真数据；或像 LLM 预训练那样拼接后切成定长。</p>
+<p>多卡用 <code>DistributedSampler</code>，按 rank 隔着分下标；每个 epoch 开始前 <code>sampler.set_epoch(epoch)</code>。</p>
+<p>map-style（<code>__getitem__</code>，能随机取）vs iterable-style（<code>__iter__</code>，只能顺序读）。</p>
+<p>口诀：长短不齐补齐加 mask；多卡 DistributedSampler，每轮 set_epoch。</p>
+</details>
+<h3 id="p27-zero_grad">P27 · 训练循环的五行主干是什么？zero_grad 能放在哪？</h3>
+<p>来源：<a href="lessons/09-training-loop.html">第 9 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>pred = model(x)</code> → <code>loss = loss_fn(pred, y)</code> → <code>opt.zero_grad()</code> → <code>loss.backward()</code> → <code>opt.step()</code>。</p>
+<p>zero_grad 只要在 backward 之前（或上一步 step 之后）就行；<strong>不能</strong>夹在 backward 和 step 之间（刚算的梯度会被清掉）。</p>
+<p>口诀：前向、loss、清梯度、反向、更新。</p>
+</details>
+<h3 id="p28-autocast-gradscaler">P28 · autocast 混合精度怎么写？参数和优化器用什么精度？什么时候要 GradScaler？</h3>
+<p>来源：<a href="lessons/09-training-loop.html">第 9 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>with torch.autocast(device_type, dtype=torch.bfloat16):</code> 包住前向和 loss，<code>backward</code> 放在外面。矩阵乘走 bf16，求和、softmax、loss 等敏感运算留 float32（由 Autocast 层的名单决定）。</p>
+<p><strong>参数本身和优化器更新仍是 float32</strong>。fp16 才需要 GradScaler（防梯度下溢），bf16 不需要。</p>
+<p>口诀：autocast 包前向，矩阵走 bf16；参数和更新仍是 fp32。</p>
+</details>
+<h3 id="p29-clip_grad_norm_-3-4-1">P29 · <code>clip_grad_norm_</code> 做了什么？梯度 [3, 4]、上限 1 时结果是什么？放在哪？</h3>
+<p>来源：<a href="lessons/09-training-loop.html">第 9 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>把所有参数梯度拼成一个向量，长度超过上限就<strong>等比例</strong>缩小，方向不变。[3, 4] 长度 5，缩 5 倍 → <strong>[0.6, 0.8]</strong>，函数返回裁剪前的范数 5（值得记日志）。</p>
+<p>放在 <code>backward</code> 之后、<code>step</code> 之前。</p>
+<p>口诀：裁剪放在反向和更新之间，方向不变只缩长。</p>
+</details>
+<h3 id="p30-warmup-cosine-3e-4warmup-100-1000-50-100-550-1000">P30 · warmup + cosine 学习率怎么算？最大 3e-4、warmup 100、总 1000 步时第 50 / 100 / 550 / 1000 步各多少？</h3>
+<p>来源：<a href="lessons/09-training-loop.html">第 9 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>t &lt; W：η = η_max · t / W；之后 η = η_max/2 · (1 + cos(π(t − W)/(T − W)))。</p>
+<p>第 50 步 1.5e-4，第 100 步 3e-4，第 550 步（衰减段正中）1.5e-4，第 1000 步 0。<code>LambdaLR</code> 的函数返回"最大值的几倍"；<code>sched.step()</code> 放在 <code>opt.step()</code> 之后。</p>
+<p>口诀：学习率先升后余弦降，调度跟在更新后。</p>
+</details>
+<h3 id="p31-state_dict-torchsavemodelstrictfalse">P31 · 为什么推荐存 state_dict 而不是 <code>torch.save(model)</code>？strict=False 要注意什么？</h3>
+<p>来源：<a href="lessons/10-save-load.html">第 10 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>存整个对象会把类名、模块路径一起 pickle 进去，改了类名或挪了文件就加载不了。存 state_dict（清单），加载时先用代码建结构再填数。</p>
+<p><code>load_state_dict(sd, strict=False)</code> 不报错，但会<strong>返回</strong> missing_keys / unexpected_keys，一定要检查，别让关键层悄悄没加载。</p>
+<p>口诀：存清单不存对象，先建结构再填数。</p>
+</details>
+<h3 id="p32-weights_onlytrue-safetensors">P32 · <code>weights_only=True</code> 防的是什么？safetensors 好在哪？</h3>
+<p>来源：<a href="lessons/10-save-load.html">第 10 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>torch.save</code> 用 pickle，<strong>加载时可以执行任意代码</strong>。PyTorch 2.6 起 <code>torch.load</code> 默认 <code>weights_only=True</code>，只收张量、数字、字典等纯数据，遇到别的就拒绝（实测报 UnpicklingError）。</p>
+<p>safetensors 只有张量 + JSON 头，根本没有代码可执行，还能内存映射按需读；外来模型优先用它。</p>
+<p>口诀：pickle 会执行代码，weights_only 只收纯数据。</p>
+</details>
+<h3 id="p33-float32-adamw">P33 · 断点续训要存哪些东西？float32 + AdamW 的存档大约是参数量的几倍字节？</h3>
+<p>来源：<a href="lessons/10-save-load.html">第 10 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>模型 state_dict、<strong>优化器 state_dict</strong>（AdamW 的 exp_avg、exp_avg_sq、step）、调度器、step / epoch、RNG 状态（fp16 时还有 GradScaler）、数据位置。</p>
+<p>参数 4 字节 + AdamW 两份动量 8 字节 = <strong>约 12 字节 / 参数</strong>，即参数存档的 3 倍。实测 1000×1000 Linear：模型 4.0 MB、AdamW 8.0 MB。</p>
+<p>口诀：续训存全套，AdamW 存档三倍大。</p>
+</details>
+<hr />
+<h2 id="1115">常用算子（第 11–15 章）</h2>
+<h3 id="p34-3-1-2">P34 · 广播规则是什么？(3, 1) + (2,) 的结果形状和含义？</h3>
+<p>来源：<a href="lessons/11-shape-broadcast.html">第 11 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>从<strong>最后一维</strong>开始往前对齐；每对维度要么相等、要么有一个是 1、要么有一个不存在；结果取大的。</p>
+<p>(3, 1) + (2,)：1 对 2 ✓，3 对"无" ✓ → (3, 2)：列向量拉伸成 2 列、行向量拉伸成 3 行，相当于一张加法表。报错信息 <code>must match ... at non-singleton dimension k</code> 表示第 k 维两边都不是 1 又不相等。</p>
+<p>口诀：广播从右往左对，相等或者有一个 1。</p>
+</details>
+<h3 id="p35-x-b-dx-xmeandim1">P35 · x 是 (B, D)，<code>x - x.mean(dim=1)</code> 有什么隐患？怎么避免？</h3>
+<p>来源：<a href="lessons/11-shape-broadcast.html">第 11 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>mean(dim=1)</code> 结果是 (B,)，从右对齐会去对 <strong>D</strong> 那一维。B ≠ D 时报错还好；<strong>B = D 时不报错但算错</strong>（每列减了某一行的均值）。</p>
+<p>用 <code>keepdim=True</code> 得到 (B, 1)；测试时故意用互不相等的维度大小；用 jaxtyping 标形状。</p>
+<p>口诀：恰好对上最危险，规约记得 keepdim。</p>
+</details>
+<h3 id="p36-b-t-d-b-h-t-d-view-b-h-t-d">P36 · 多头注意力怎么把 (B, T, D) 拆成 (B, H, T, d)？为什么不能直接 view 成 (B, H, T, d)？</h3>
+<p>来源：<a href="lessons/11-shape-broadcast.html">第 11 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>q.view(B, T, H, d).transpose(1, 2)</code>，或 <code>rearrange(q, "b t (h d) -&gt; b h t d", h=H)</code>。</p>
+<p>内存里同一个 token 的 D 个数挨着放；直接 view 成 (B, H, T, d) 会把<strong>不同 token</strong> 的数切进同一个头。先在最后一维切（不跨 token），再用 transpose 换位置。拆完不连续（例 stride (40, 4, 8, 1)），合回去要 reshape 或先 contiguous。</p>
+<p>口诀：拆头先切最后维，再用 transpose 换位置。</p>
+</details>
+<h3 id="p37-attention-mask">P37 · attention 的 mask 怎么用？为什么填 −∞？</h3>
+<p>来源：<a href="lessons/12-index-scatter.html">第 12 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>scores.masked_fill(~keep, float("-inf")).softmax(-1)</code>：keep 为 True 表示保留，<code>~</code> 取反。</p>
+<p>e^(−∞) = 0，被遮的位置在 softmax 里权重<strong>正好为 0</strong>，剩下的重新归一化。例：[0.5, 3.0, 遮] → [0.0759, 0.9241, 0]。</p>
+<p>口诀：mask 填负无穷，softmax 后正好是零。</p>
+</details>
+<h3 id="p38-torchwherecond-a-b-xx-0">P38 · <code>torch.where(cond, a, b)</code> 和布尔索引 <code>x[x &gt; 0]</code> 有什么区别？</h3>
+<p>来源：<a href="lessons/12-index-scatter.html">第 12 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>where 逐元素三选一，<strong>形状不变</strong>，全在 GPU 上、不同步，编译器能融合（代价：a、b 两边都算）。</p>
+<p>布尔索引输出长度<strong>取决于数据</strong>（[−2, 1, 3] → [1, 3]），要先知道有几个 True：是同步点，也让 compile 难办。能用 where / masked_fill 就别用布尔索引。</p>
+<p>口诀：where 三选一形状不变，布尔索引长度看数据。</p>
+</details>
+<h3 id="p39-gather">P39 · <code>gather</code> 的下标规则是什么？举一个典型用途。</h3>
+<p>来源：<a href="lessons/12-index-scatter.html">第 12 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>dim = 1 时 <code>out[i][j] = input[i][ index[i][j] ]</code>：每行按自己的下标取；index 和输出同形状（所以常先 <code>unsqueeze(1)</code>）。</p>
+<p>典型用途：取每个样本正确类别的 log 概率（交叉熵的核心一步）。例：log 概率表两行、目标 [0, 2] → [log 0.7, log 0.6] = [−0.3567, −0.5108]。</p>
+<p>口诀：gather 按号取。</p>
+</details>
+<h3 id="p40-scatter_add-scatter_-topk">P40 · <code>scatter_add</code> 做什么？和 <code>scatter_</code> 的区别？<code>topk</code> 返回什么？</h3>
+<p>来源：<a href="lessons/12-index-scatter.html">第 12 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>按下标把值<strong>加</strong>到目标位置，同一位置可累加。例：zeros(3)、idx [0, 2, 0, 1]、src [1, 2, 3, 4] → [4, 4, 2]（<code>index_add</code> 同理）。用途：MoE 合并专家输出、计数、图神经网络聚合。</p>
+<p><code>scatter_</code>（不带 add）是写入，同一位置写多次谁最后写算谁，GPU 上顺序不定。</p>
+<p><code>topk(k)</code> 返回<strong>值和下标</strong>两样：[0.1, 0.5, 0.2, 0.9].topk(2) → 值 [0.9, 0.5]、下标 [3, 1]。</p>
+<p>口诀：scatter_add 按号加回，topk 给值又给号。</p>
+</details>
+<h3 id="p41-sumdimk-dim-123456-sum0sum1">P41 · <code>sum(dim=k)</code> 的 dim 指什么？<code>[[1,2,3],[4,5,6]]</code> 的 sum(0)、sum(1)？</h3>
+<p>来源：<a href="lessons/13-reduce-matmul.html">第 13 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>dim 是<strong>被压扁（消失）的那一维</strong>。sum(0) 压掉 2 行 → [5, 7, 9]；sum(1) 压掉 3 列 → [6, 15]。<code>keepdim=True</code> 保留成 1，方便广播回去。<code>max(dim)</code> 返回 values 和 indices。</p>
+<p>口诀：dim 是被压扁的那一维。</p>
+</details>
+<h3 id="p42-einsum-m-k-k-n-flops">P42 · einsum 字符串怎么读？(m, k) @ (k, n) 要多少 FLOPs？</h3>
+<p>来源：<a href="lessons/13-reduce-matmul.html">第 13 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>箭头左边每个输入一组字母，右边是输出；<strong>两边都有的字母保留，只在左边的字母求和</strong>。<code>"i,i-&gt;"</code> 点积、<code>"ij-&gt;ji"</code> 转置、<code>"bhqd,bhkd-&gt;bhqk"</code> 是每头 QKᵀ。</p>
+<p>矩阵乘 FLOPs = <strong>2mkn</strong>（每个结果 k 次乘 + k 次加）。4096³ ≈ 1.37 × 10¹¹。</p>
+<p>口诀：einsum 两边都有的留下、只在左边的求和；矩阵乘 2mkn。</p>
+</details>
+<h3 id="p43-log-ex-inflogsumexp">P43 · 为什么直接算 log(Σ eˣ) 会得到 inf？logsumexp 怎么躲过去？</h3>
+<p>来源：<a href="lessons/13-reduce-matmul.html">第 13 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>e¹⁰⁰⁰ 超出 float32 上限（约 3.4 × 10³⁸）→ inf。</p>
+<p>恒等式：log Σ eˣⁱ = M + log Σ e^(xᵢ − M)，M 取最大值。减完最大项是 e⁰ = 1，其余 ≤ 1，不会爆。例 [1000, 1001, 1002]：M = 1002，e^(−2) + e^(−1) + 1 = 1.503，log 1.503 = 0.4076，结果 1002.4076。softmax 内部也先减最大值。</p>
+<p>口诀：logsumexp 先减最大，exp 就不爆。</p>
+</details>
+<h3 id="p44-bf16-1-1000">P44 · bf16 一个个加 1，加 1000 次结果是多少？为什么？由此得出什么规矩？</h3>
+<p>来源：<a href="lessons/13-reduce-matmul.html">第 13 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><strong>256</strong>。bf16 在 [256, 512) 里相邻可表示数间隔是 2，256 + 1 = 257 正好在中间，舍入到偶数回到 256，之后永远加不动。而 <code>torch.ones(4096, dtype=bf16).sum()</code> 得 4096，因为 sum kernel 内部用 float32 累加。</p>
+<p>规矩：数据可以存低精度，<strong>累加器要用 float32</strong>（求和、矩阵乘内部累加、softmax 分母、loss、优化器状态）。</p>
+<p>口诀：存可以低精度，累加要用 fp32。</p>
+</details>
+<h3 id="p45-torchnnx-torchnnfunctionalx">P45 · <code>torch.nn.X</code> 和 <code>torch.nn.functional.x</code> 怎么选？</h3>
+<p>来源：<a href="lessons/14-functional-attention.html">第 14 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>nn 类：<strong>有可训练参数或有状态</strong>（如 LayerNorm 的 γ、Dropout 的 train/eval），进模块树和 state_dict。</p>
+<p>F 函数：纯计算，参数自己传（激活、softmax、attention）。</p>
+<p>口诀：有参数用 nn，纯计算用 F。</p>
+</details>
+<h3 id="p46-layernorm-rmsnorm-1-2-3-4">P46 · LayerNorm 和 RMSNorm 的公式差在哪？对 [1, 2, 3, 4] 各输出什么？</h3>
+<p>来源：<a href="lessons/14-functional-attention.html">第 14 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>LayerNorm：γ·(x − μ)/√(σ² + ε) + β，减均值、除标准差；RMSNorm：γ·x/√(mean(x²) + ε)，不减均值、没有 β，更省，LLM 默认用它。</p>
+<p>[1, 2, 3, 4]：LN（μ = 2.5，σ² = 1.25）→ [−1.342, −0.447, 0.447, 1.342]；RMS（√7.5 = 2.739）→ [0.365, 0.730, 1.095, 1.461]。</p>
+<p>口诀：LayerNorm 减均值除标准差，RMSNorm 只除均方根。</p>
+</details>
+<h3 id="p47-swiglu">P47 · SwiGLU 的公式是什么？有几个权重矩阵？</h3>
+<p>来源：<a href="lessons/14-functional-attention.html">第 14 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>FFN(x) = W₂(SiLU(xW₁) ⊙ (xW₃))：一条路过 SiLU 当"门"，一条不过，逐元素相乘再投影。<strong>三个</strong>矩阵。SiLU(x) = x·sigmoid(x)、GELU = x·Φ(x)，都是平滑版 ReLU。</p>
+<p>口诀：SwiGLU 门乘线性再投影，三个矩阵。</p>
+</details>
+<h3 id="p48-fscaled_dot_product_attention-attention">P48 · 为什么用 <code>F.scaled_dot_product_attention</code> 而不是手写 attention？它有哪些后端？</h3>
+<p>来源：<a href="lessons/14-functional-attention.html">第 14 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>手写版要写出 B × H × T × T 的分数表（T = 8192 时每头 6700 万个数），又慢又占显存。SDPA 自动选后端：<strong>Flash</strong>（分块算、不写出分数表，要 fp16 / bf16）、memory-efficient、cuDNN、math（参考实现）。实测和手写最大差 1.6 × 10⁻⁷。</p>
+<p><code>with sdpa_kernel(SDPBackend.FLASH_ATTENTION):</code> 强制后端（不支持时报错）。</p>
+<p>口诀：attention 用 SDPA，自动挑 Flash 不写 T 方表。</p>
+</details>
+<h3 id="p49-flexattention">P49 · FlexAttention 解决什么问题？怎么用？</h3>
+<p>来源：<a href="lessons/14-functional-attention.html">第 14 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>想改 attention 规则（滑动窗口、相对位置偏置、文档内因果）又不想手写 Flash kernel。写一个 <code>score_mod(score, b, h, q_idx, kv_idx)</code> 改分数，或 <code>mask_mod</code> 定可见性 + <code>create_block_mask</code>，用 <code>torch.compile(flex_attention)</code> 编译成 Flash 风格的 Triton kernel；整块被遮住的直接跳过。</p>
+<p>主场是 CUDA；本机 Mac CPU 上只能跑不编译的慢速参考版。</p>
+<p>口诀：想改规则写小函数，Flex 编成 kernel。</p>
+</details>
+<h3 id="p50-fcross_entropy-logits-2-1-01-0-loss">P50 · <code>F.cross_entropy</code> 接收什么、算什么？logits [2, 1, 0.1]、目标 0 的 loss？</h3>
+<p>来源：<a href="lessons/15-loss-optimizer.html">第 15 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>接收 <strong>logits</strong>（未 softmax 的分数，(N, C)）和<strong>类别编号</strong>（(N,)）。内部 log_softmax → 取正确类 → 取负 → 平均。</p>
+<p>softmax = [0.659, 0.242, 0.099]，−log 0.659 = <strong>0.4170</strong>。别先 softmax 再喂进去。</p>
+<p>口诀：cross_entropy 吃 logits，算负 log 正确概率。</p>
+</details>
+<h3 id="p51-b-t-v-cross_entropyignore_index-label_smoothing">P51 · 语言模型 (B, T, V) 的输出怎么喂给 cross_entropy？ignore_index 和 label_smoothing 干什么？</h3>
+<p>来源：<a href="lessons/15-loss-optimizer.html">第 15 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>拍平：<code>F.cross_entropy(logits.view(-1, V), targets.view(-1))</code>。</p>
+<p><code>ignore_index</code>（默认 −100）的位置不算 loss、<strong>也不进平均的分母</strong>（跳过补齐位、SFT 的提示词）。<code>label_smoothing=ε</code>：正确类目标改成 1 − ε，其余均分 ε，防过度自信（例 0.4170 → 0.5137）。</p>
+<p>口诀：语言模型拍平再算，补齐位 ignore_index。</p>
+</details>
+<h3 id="p52-adamw-1g-05lr-01wd-001">P52 · 写出 AdamW 一步的公式。θ = 1、g = 0.5、lr = 0.1、wd = 0.01 第一步后 θ 是多少？</h3>
+<p>来源：<a href="lessons/15-loss-optimizer.html">第 15 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>θ ← θ − η·λ·θ（先衰减）；m ← β₁m + (1−β₁)g，v ← β₂v + (1−β₂)g²；m̂ = m/(1−β₁ᵗ)，v̂ = v/(1−β₂ᵗ)；θ ← θ − η·m̂/(√v̂ + ε)。</p>
+<p>衰减后 0.999；m = 0.05、v = 0.00025、m̂ = 0.5、v̂ = 0.25；更新量 0.1 → <strong>θ = 0.899</strong>。</p>
+<p>第一步更新量 m̂/√v̂ = g/|g| = 1，<strong>和梯度大小无关</strong>（梯度 0.0005 也走 0.1）。</p>
+<p>口诀：AdamW 先衰减，再用惯性除以平时梯度，首步约等学习率。</p>
+</details>
+<h3 id="p53-for-loop-foreach-fused-weight-decay">P53 · 优化器的 for-loop / foreach / fused 三种实现有什么区别？哪些参数通常不做 weight decay？</h3>
+<p>来源：<a href="lessons/15-loss-optimizer.html">第 15 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>同一个算法：for-loop 每个参数张量单独发几个 kernel（最慢）；<code>foreach</code> 打包成批处理；<code>fused=True</code> 一个融合 kernel 算完整个更新公式（最快）。</p>
+<p>bias 和 norm 的 γ（<code>p.dim() &lt; 2</code>）单独一组 <code>weight_decay=0</code>。PyTorch AdamW 默认 lr 1e-3、wd 0.01，大模型常改成 3e-4、0.1。</p>
+<p>口诀：fused 一个 kernel，bias 和 norm 不衰减。</p>
+</details>
+<hr />
+<h2 id="1622">分布式训练（第 16–22 章）</h2>
+<h3 id="p54-spmd">P54 · 多卡训练为什么是"每卡一个进程跑同一份脚本"（SPMD），而不是一个进程管所有卡？</h3>
+<p>来源：<a href="lessons/16-process-model.html">第 16 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>Python 有全局解释器锁（GIL），一个进程同一时刻只能跑一个线程的 Python 代码，多卡排队等一个 Python 跑不满（老的 <code>nn.DataParallel</code> 就有这个问题）。</p>
+<p>SPMD：每张卡一个进程，跑完全相同的脚本，靠编号（rank）决定用哪张卡、读哪部分数据。</p>
+<p>口诀：一卡一进程，同一份脚本，靠编号分工。</p>
+</details>
+<h3 id="p55-ranklocal_rankworld_size-1-local_rank-2-4-rank">P55 · rank、local_rank、world_size 各是什么？机器 1 上 local_rank 2（每台 4 卡）的 rank？</h3>
+<p>来源：<a href="lessons/16-process-model.html">第 16 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>world_size：总进程数；rank：全局编号；local_rank：本机编号，决定用哪张卡（<code>torch.cuda.set_device(local_rank)</code>）。</p>
+<p>rank = node_rank × nproc_per_node + local_rank = 1 × 4 + 2 = <strong>6</strong>。习惯上只有 rank 0 打日志（DCP 存档除外）。</p>
+<p>口诀：rank 全局号，local_rank 定用哪张卡，rank 0 管日志。</p>
+</details>
+<h3 id="p56-torchrun-mac">P56 · torchrun 帮你做了什么？Mac 上本机多进程要注意什么？</h3>
+<p>来源：<a href="lessons/16-process-model.html">第 16 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>在每台机器上起 N 个进程，设好 RANK、LOCAL_RANK、WORLD_SIZE、MASTER_ADDR、MASTER_PORT，让进程在主节点会合（rendezvous）；<code>init_process_group</code> 读这些变量连起来。</p>
+<p>Mac 上 Gloo 会找错网卡卡住，要 <code>GLOO_SOCKET_IFNAME=lo0</code> + <code>--master_addr=127.0.0.1</code>。</p>
+<p>口诀：torchrun 起进程发编号、主节点会合；Mac 上指定 lo0。</p>
+</details>
+<h3 id="p57-nccl-gloo-distributedsampler-batch">P57 · NCCL 和 Gloo 各用在哪？DistributedSampler 怎么分数据？全局 batch 怎么算？</h3>
+<p>来源：<a href="lessons/16-process-model.html">第 16 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>NCCL：GPU 之间（NVLink、InfiniBand），GPU 训练只用它；Gloo：CPU 之间、本机练习。</p>
+<p>DistributedSampler 按 rank 隔着分：rank r 拿 r、r + W、r + 2W…（8 卡时 rank 0 拿 0、8、16）；每 epoch <code>set_epoch(e)</code>。</p>
+<p>全局 batch = 每卡 batch × 卡数（× 梯度累积步数）。</p>
+<p>口诀：GPU 用 NCCL，Sampler 隔着分，每轮 set_epoch。</p>
+</details>
+<h3 id="p58-all_reduceall_gatherreduce_scatterbroadcast">P58 · all_reduce、all_gather、reduce_scatter、broadcast 各是什么结果？</h3>
+<p>来源：<a href="lessons/17-collectives.html">第 17 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>all_reduce：大家求和，<strong>人人</strong>拿到总和（[1, 2] + [2, 4] → 两人都是 [3, 6]）；
+all_gather：拼起来，人人一份完整的；
+reduce_scatter：求和后<strong>每人只拿一段</strong>（[10, 20] + [20, 40] → rank 0 [30]、rank 1 [60]）；
+broadcast：一个人的数复制给所有人。
+另有 all_to_all（每人切 N 份分发，MoE 用）、barrier（只同步）。</p>
+<p>口诀：all_reduce 加起来人人有，all_gather 拼起来人人有，reduce_scatter 加完各拿一段。</p>
+</details>
+<h3 id="p59-all_reduce-reduce_scatterall_gather">P59 · all_reduce 和 reduce_scatter、all_gather 是什么关系？集合通信有什么铁律？</h3>
+<p>来源：<a href="lessons/17-collectives.html">第 17 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>all_reduce = reduce_scatter + all_gather：先每人拿到一段完整的和，再把各段拼回去。ZeRO / FSDP 就是在两半中间插进"只更新自己那一段"。</p>
+<p>铁律：<strong>所有进程都要调用、按同样的顺序调用</strong>，否则其他 rank 永远等，程序卡死。</p>
+<p>口诀：大家同序调用，少一个就卡死；all_reduce 拆成两半。</p>
+</details>
+<h3 id="p60-ring-all-reduce">P60 · ring all-reduce 每张卡要发送多少数据？各种并行主要用哪个集合通信？</h3>
+<p>来源：<a href="lessons/17-collectives.html">第 17 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>每卡发 2(N − 1)·K/N ≈ <strong>2K</strong>（K = 元素数），几乎不随卡数增长：4 卡 1.5K，64 卡 1.97K。reduce_scatter、all_gather 各约 K。</p>
+<p>DDP：all_reduce 梯度；FSDP：all_gather 参数 + reduce_scatter 梯度；TP：层内 all_reduce；PP：send / recv；EP：all_to_all；初始化：broadcast。</p>
+<p>口诀：ring 每卡发两倍 K，几乎不随卡数涨。</p>
+</details>
+<h3 id="p61-ddp">P61 · DDP 在包装时、反向时、更新时各做了什么？</h3>
+<p>来源：<a href="lessons/18-ddp.html">第 18 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>包装时：<strong>broadcast</strong> rank 0 的参数，保证起点一致（实测两个 rank 不同种子初始化，包装后相同）。
+反向时：梯度按桶 <strong>all_reduce 并除以 N 取平均</strong>（实测 [1, 0] 与 [0, 1] → 都是 [0.5, 0.5]）。
+更新时：不通信，各自 step，参数自然一致。</p>
+<p>代价：参数、梯度、优化器状态每卡各存一份，显存不省。</p>
+<p>口诀：包装时广播参数，反向时 all_reduce 取平均，更新各自做。</p>
+</details>
+<h3 id="p62-ddp">P62 · DDP 的"分桶 + 重叠"是怎么把通信藏起来的？桶大小怎么取舍？</h3>
+<p>来源：<a href="lessons/18-ddp.html">第 18 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>反向从最后一层往前算，最后几层梯度最先好。参数按反向顺序装进桶（默认 25 MB），<strong>一桶凑齐就 all_reduce</strong>，和前面几层的反向并行（靠参数上的 hook 触发）。例：4 段各 10 ms、每桶 8 ms：算完再发 72 ms，重叠后约 48 ms，只剩最后一桶露在外面。</p>
+<p>桶太小：通信次数多、启动开销大；桶太大：第一桶要等很久才发，重叠少（<code>bucket_cap_mb</code>）。</p>
+<p>口诀：梯度好一桶发一桶，通信藏在计算后。</p>
+</details>
+<h3 id="p63-ddp-no_sync-loss">P63 · DDP 梯度累积为什么要 <code>no_sync</code>？有参数没进 loss 会怎样？</h3>
+<p>来源：<a href="lessons/18-ddp.html">第 18 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>每次 backward 都会触发 all_reduce，前 k − 1 个小 batch 的通信是白费的；包在 <code>with model.no_sync():</code> 里只在本地累加，第 k 次再通信。</p>
+<p>有参数没参与 loss：DDP 一直等它的梯度而报错；修模型或 <code>find_unused_parameters=True</code>（慢）；参数集合固定时可设 <code>static_graph=True</code>。</p>
+<p>口诀：累积前几步 no_sync，参数没进 loss 要报错。</p>
+</details>
+<h3 id="p64-adamw-7b">P64 · 混合精度 + AdamW 训练，每个参数占几字节显存？分别是什么？7B 模型合计多少？</h3>
+<p>来源：<a href="lessons/19-fsdp2.html">第 19 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>bf16 参数 2 + bf16 梯度 2 + fp32 主参数与 m、v 共 12 = <strong>16 字节</strong>（2Ψ + 2Ψ + 12Ψ）。</p>
+<p>7B：16 × 7 × 10⁹ = <strong>112 GB</strong>，还没算激活；DDP 下每张卡都存这么多。</p>
+<p>口诀：混合精度每参十六字节，DDP 人人一整套。</p>
+</details>
+<h3 id="p65-zero-1-2-3">P65 · ZeRO-1 / 2 / 3 分别切了什么？每卡显存公式？</h3>
+<p>来源：<a href="lessons/19-fsdp2.html">第 19 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>ZeRO-1 切优化器状态：4Ψ + 12Ψ/N；ZeRO-2 再切梯度：2Ψ + 14Ψ/N；ZeRO-3（= FSDP）连参数也切：16Ψ/N。7B、8 卡：38.5 / 26.25 / 14 GB（DDP 112 GB）。</p>
+<p>通信：ZeRO-1/2 和 DDP 一样约 2Ψ；ZeRO-3 约 3Ψ（前向 all_gather、反向再 all_gather、梯度 reduce_scatter）。激活不能切（每卡数据不同）。</p>
+<p>口诀：ZeRO 一切优化器、二再切梯度、三连参数也切。</p>
+</details>
+<h3 id="p66-fsdp2-fully_shard">P66 · FSDP2 里一层的生命周期是怎样的？为什么必须逐层 <code>fully_shard</code>？</h3>
+<p>来源：<a href="lessons/19-fsdp2.html">第 19 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>平时每卡只存一片（参数是 <code>Shard(0)</code> 的 DTensor，实测 (6, 4) → 每卡 (3, 4)）。这层前向前 <strong>all_gather</strong> 拼完整 → 算 → （reshard 时）丢掉 → 反向前再 all_gather → 算梯度 → 丢掉，梯度 <strong>reduce_scatter</strong> 只留自己那片 → step 只更新自己那片。还会预取下一层。</p>
+<p>套在哪一层，哪一层就是一次 all_gather 的单位；只套根模块会一次拼出整个模型，显存不省。从下往上：先每层，再根。</p>
+<p>口诀：层前拼、用完丢、反向后梯度 reduce_scatter；从下往上逐层套。</p>
+</details>
+<h3 id="p67-reshard_after_forwardmixedprecisionpolicyhsdp">P67 · <code>reshard_after_forward</code>、<code>MixedPrecisionPolicy</code>、HSDP 各是什么？</h3>
+<p>来源：<a href="lessons/19-fsdp2.html">第 19 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>reshard_after_forward：True（非根默认）前向后丢完整参数、反向再拼（省显存）；False（根默认）留着（省通信，≈ ZeRO-2）；整数表示只在机内保留。</p>
+<p>MixedPrecisionPolicy(param_dtype=bf16, reduce_dtype=fp32)：all_gather 和计算用 bf16，梯度求和用 fp32；在模块边界转换。</p>
+<p>HSDP：2D mesh (机器数, 每机卡数)，机内切分、机间复制只 all_reduce 梯度，减少跨机流量。</p>
+<p>口诀：reshard 用显存换通信；机内切、机间复制叫 HSDP。</p>
+</details>
+<h3 id="p68-devicemesh-dp2-tp4-8">P68 · DeviceMesh 是什么？(dp=2, tp=4) 的 8 卡怎么分组？</h3>
+<p>来源：<a href="lessons/20-dtensor-tp.html">第 20 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>把卡排成多维表格，每一维对应一种并行、一个通信组。(2, 4)：第 0 行卡 0–3、第 1 行卡 4–7；同一行做 TP（机内 NVLink），同一列做 DP（跨机）。<code>mesh["tp"]</code>、<code>mesh["dp"]</code> 取子网格。</p>
+<p>口诀：mesh 把卡排成表，每一维一种并行一个组。</p>
+</details>
+<h3 id="p69-dtensor-placement-placement">P69 · DTensor 的三种 placement 是什么？换 placement 对应哪些集合通信？</h3>
+<p>来源：<a href="lessons/20-dtensor-tp.html">第 20 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>Shard(d)</code>：沿第 d 维切开；<code>Replicate()</code>：每卡一份完整；<code>Partial()</code>：每卡一份部分和。</p>
+<p>Shard → Replicate = all_gather；Partial → Replicate = all_reduce；Partial → Shard = reduce_scatter。实测 <code>(dt * 2).sum()</code> 的 placement 是 Partial(sum)，<code>full_tensor()</code> 才 all_reduce 得 56。</p>
+<p>口诀：Shard 切开、Replicate 复制、Partial 部分和，换摆法就是通信。</p>
+</details>
+<h3 id="p70-mlp-all_reduce">P70 · 张量并行怎么切 MLP？为什么只需要一次 all_reduce？</h3>
+<p>来源：<a href="lessons/20-dtensor-tp.html">第 20 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>W₁ <strong>按列切</strong>（Colwise）：每卡算出中间结果的一半列，逐元素激活各算各的，不通信；W₂ <strong>按行切</strong>（Rowwise）：正好对上自己那一半，每卡得到一个和最终结果同形状的部分和；最后 <strong>all_reduce 一次</strong>。例 X = [1, 2]：两卡部分和都是 [1, 2]，相加 [2, 4]，和不切一样。</p>
+<p><code>parallelize_module(m, mesh, {"w1": ColwiseParallel(), "w2": RowwiseParallel()})</code>；nn.Linear 存转置权重，所以 Colwise 显示为 Shard(0)、Rowwise 为 Shard(1)。</p>
+<p>口诀：TP 先列后行，中间不传、最后一次 all_reduce。</p>
+</details>
+<h3 id="p71-tp-sp">P71 · TP 为什么只在一台机器内用？SP（序列并行）补了什么？</h3>
+<p>来源：<a href="lessons/20-dtensor-tp.html">第 20 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>TP 每层前向 2 次、反向 2 次 all_reduce，而且下一步要等它的结果，难以和计算重叠，需要 NVLink 这样的高带宽，一般 TP ≤ 8、只在机内。</p>
+<p>SP：把 LayerNorm、dropout 部分的激活沿<strong>序列维</strong>切开，all_reduce 换成 reduce_scatter + all_gather，通信量不变、激活显存更省（<code>SequenceParallel()</code>）。</p>
+<p>口诀：TP 只在机内用，SP 再把 norm 按序列切。</p>
+</details>
+<h3 id="p72-p-4-batch-32-micro-batch">P72 · 流水线并行的气泡占比怎么算？p = 4 时只送一个 batch 和切成 32 个 micro-batch 各多少？</h3>
+<p>来源：<a href="lessons/21-pp-cp-ep.html">第 21 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>单个 batch：空等是有效时间的 <strong>p − 1</strong> 倍（4 段时 3 倍）。切成 m 个 micro-batch：r = <strong>(p − 1)/m</strong>，p = 4、m = 32 时约 9%（m = 8 时 37.5%）。</p>
+<p>口诀：切成 m 个小批，气泡降到 (p − 1)/m。</p>
+</details>
+<h3 id="p73-afab-1f1b">P73 · AFAB 和 1F1B 调度有什么区别？还有哪些进一步的办法？</h3>
+<p>来源：<a href="lessons/21-pp-cp-ep.html">第 21 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>AFAB（全部前向再全部反向）：m 个小批的激活同时存着，显存随 m 涨。1F1B：填满后每卡一次前向紧接一次反向，反向完就扔激活，同时存的约 p 份，与 m 无关。<strong>两者气泡一样大</strong>。</p>
+<p>进一步：interleaved（每卡放几小段不相邻的层，气泡再除以段数）、Zero Bubble / DualPipe（把反向拆成对输入、对权重两部分去填气泡）。</p>
+<p>口诀：1F1B 前反交替，激活不随 m 涨。</p>
+</details>
+<h3 id="p74-cp-attention-mask-zig-zag">P74 · 上下文并行（CP）怎么处理 attention？因果 mask 下为什么要 zig-zag？</h3>
+<p>来源：<a href="lessons/21-pp-cp-ep.html">第 21 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>CP 按序列切，每卡一段 token；norm、MLP 各算各的，attention 用 <strong>Ring Attention</strong>：N 张卡围成环，一边用手里的 K、V 算，一边把 K、V 传给右边，N 轮后每个 Q 见过全部 K、V；部分结果用 online softmax 合并。</p>
+<p>因果时后面的 token 要看的多，按顺序切负载不均；zig-zag 让每卡拿一段靠前加一段靠后。</p>
+<p>口诀：序列太长 CP 绕圈传 KV。</p>
+</details>
+<h3 id="p75-ep-moe">P75 · 专家并行（EP）一次 MoE 层要做哪几步通信？五维并行怎么组合？</h3>
+<p>来源：<a href="lessons/21-pp-cp-ep.html">第 21 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>路由 → <strong>all_to_all</strong> 把 token 送到专家所在的卡 → 各卡算自己的专家 → <strong>all_to_all</strong> 收回并按权重合并。</p>
+<p>组合原则：通信最频繁的放最里面（TP 机内）、最稀疏的放最外面（DP / PP 跨机）。Playbook 三步法：先装得下（FSDP → TP → PP → CP），再凑全局 batch（DP + 梯度累积），最后实测调吞吐。参考实现 torchtitan。</p>
+<p>口诀：专家分卡 all_to_all；最勤的通信放机内，最疏的放外层。</p>
+</details>
+<h3 id="p76-dcp">P76 · DCP（分布式存档）怎么存和读？存下来的文件长什么样？</h3>
+<p>来源：<a href="lessons/22-dcp-debug.html">第 22 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>msd, osd = get_state_dict(model, opt)</code> → <code>dcp.save({"model": msd, "optim": osd}, checkpoint_id=path)</code>，<strong>所有 rank 都要调用</strong>；每卡同时写自己那片。实测目录里是 <code>.metadata</code> + <code>__0_0.distcp</code> + <code>__1_0.distcp</code>。</p>
+<p>读：再取一次 state_dict 当容器 → <code>dcp.load(state, checkpoint_id=path)</code> 原地填 → <code>set_state_dict(model, opt, ...)</code>。</p>
+<p>口诀：分布式存档每卡存一片，save、load 人人都要调。</p>
+</details>
+<h3 id="p77-dcp">P77 · DCP 为什么能换卡数加载？还有哪些实用功能？</h3>
+<p>来源：<a href="lessons/22-dcp-debug.html">第 22 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>元数据记的是每一片在<strong>完整张量</strong>里的位置，加载时按当前切分方式去读需要的范围：64 卡存的可以 32 卡读，FSDP 存的可以 FSDP + TP 读。</p>
+<p><code>dcp.async_save</code> 先拷到 CPU 就返回，后台写盘；<code>dcp_to_torch_save</code> 转成单个普通文件给推理用。</p>
+<p>口诀：元数据记位置，换卡数照样读。</p>
+</details>
+<h3 id="p78-hang">P78 · 分布式训练卡死（hang）最常见的原因有哪些？</h3>
+<p>来源：<a href="lessons/22-dcp-debug.html">第 22 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>各 rank 调用集合通信的<strong>次数或顺序不一致</strong>：
+- 条件分支依赖本 rank 的值（如 <code>if loss.item() &gt; t: all_reduce(...)</code>）；
+- 某个 rank 数据先读完提前退出循环、或 OOM 崩了；
+- 只在 rank 0 调用了内部含通信的函数（<code>full_tensor()</code>、DCP save）；
+- DDP 有参数没进 loss；启动时进程没起全、地址端口不通。</p>
+<p>改法：先把条件 all_reduce 统一（如取 MAX），所有 rank 用同一个判断。</p>
+<p>口诀：卡死多半是通信次数顺序不一致。</p>
+</details>
+<h3 id="p79">P79 · 分布式排错的工具和顺序？</h3>
+<p>来源：<a href="lessons/22-dcp-debug.html">第 22 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>先 <code>init_process_group(timeout=...)</code> 让它超时报错 → <code>TORCH_DISTRIBUTED_DEBUG=DETAIL</code> 检查哪次通信对不上 → <code>py-spy dump --pid</code> 看每个 rank 停在哪行 → 回代码找条件分支。</p>
+<p>其他：<code>TORCH_NCCL_TRACE_BUFFER_SIZE</code>（Flight Recorder 记最近的通信）、<code>NCCL_DEBUG=INFO</code>（看走 NVLink / IB 还是 TCP、网卡对不对）、所有 rank 带前缀打日志。</p>
+<p>口诀：先设超时，再开 DETAIL，py-spy 看停在哪，NCCL_DEBUG 看网络。</p>
+</details>
+<hr />
+<h2 id="2328">训练性能调优（第 23–28 章）</h2>
+<h3 id="p80-token-flops">P80 · 训练一个 token 大约多少 FLOPs？为什么是这个数？</h3>
+<p>来源：<a href="lessons/23-perf-method.html">第 23 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>≈ <strong>6N</strong>（N 为参数量）：前向 2N（每个参数一次乘一次加）、反向 4N（对输入、对权重各一次同样大小的矩阵乘）。7B 训 1 万亿 token ≈ 4.2 × 10²² FLOPs。不含 attention 的 QKᵀ 项，长序列要另加。</p>
+<p>口诀：每个 token 六倍参数：前向二、反向四。</p>
+</details>
+<h3 id="p81-mfu-hfu">P81 · MFU 怎么算？多少算好？和 HFU 有什么区别？</h3>
+<p>来源：<a href="lessons/23-perf-method.html">第 23 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>MFU = 6N × 每秒 token 数 ÷（卡数 × 每卡峰值 FLOPS）。例 7B、8 × H100（989 TFLOPS）、9.6 万 token/s → <strong>约 51%</strong>。</p>
+<p>dense 50% 左右是好成绩，多机 MoE 40% 是一流（DeepSeek-V3 约 39–44%），低于 20% 有明显浪费。</p>
+<p>HFU 把激活重计算多做的也算进去会虚高；对比方案用 MFU。</p>
+<p>口诀：MFU 等于六 N 乘吞吐，除以卡数乘峰值。</p>
+</details>
+<h3 id="p82">P82 · 训练慢的四类瓶颈是什么？调优循环的三条纪律？</h3>
+<p>来源：<a href="lessons/23-perf-method.html">第 23 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>GPU 闲着（时间线大段空白：数据、同步、Python 开销）、访存受限算子（大量小逐元素 kernel）、算力受限（matmul 本身不快：精度、形状）、通信（NCCL 占比高、没重叠）；显存不够则间接导致 batch 太小。</p>
+<p>循环：算账 → 基线 → 测量 → 改一处 → 再测。纪律：一次只改一处；改完先对 loss；跳过热身步只测稳定步。</p>
+<p>口诀：闲着、访存、算、通信，先看时间线；改一处测一次，别忘对 loss。</p>
+</details>
+<h3 id="p83-torchprofiler">P83 · <code>torch.profiler</code> 的基本模板有哪几个要素？</h3>
+<p>来源：<a href="lessons/24-profiler.html">第 24 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>profile(activities=[CPU, CUDA], schedule=schedule(wait, warmup, active), record_shapes, profile_memory, with_stack)</code>；循环里每步末尾 <code>prof.step()</code>；<code>record_function("名字")</code> 给代码段命名；<code>prof.key_averages().table(sort_by=...)</code> 看汇总；<code>prof.export_chrome_trace("t.json")</code> 拖进 ui.perfetto.dev 看时间线。</p>
+<p>schedule 先 wait、warmup 再 active：跳过编译、热身、分配显存的前几步。</p>
+<p>口诀：profile 加 schedule，跳过热身只录稳定步。</p>
+</details>
+<h3 id="p84-profiler-self-total">P84 · profiler 表里 Self 和 Total 有什么区别？本章实测里优化器条目说明了什么？</h3>
+<p>来源：<a href="lessons/24-profiler.html">第 24 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>Self：函数<strong>自己</strong>花的时间；Total：包含它调用的所有子函数。按 Self 找谁在真干活，按 Total 找哪块代码慢。</p>
+<p>实测小 MLP + 默认 AdamW：<code>Optimizer.step</code> Total 47.7%，Self 只有 6%——下面是一堆 <code>mul_</code>、<code>lerp_</code>、<code>addcdiv_</code>、<code>sqrt</code> 小算子（每个参数张量一串）。</p>
+<p>口诀：Self 是自己干、Total 含子孙，Total 大 Self 小底下全是碎活。</p>
+</details>
+<h3 id="p85-amdahl">P85 · 本章"改一处、再测"的例子：改了什么，结果如何？和 Amdahl 定律怎么对上？</h3>
+<p>来源：<a href="lessons/24-profiler.html">第 24 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>只改 <code>AdamW(..., fused=True)</code>：每步 2.61 → 1.82 ms，优化器 1.25 → 0.51 ms，占比 47.9% → 27.9%。</p>
+<p>Amdahl：1 / ((1 − p) + p/s)，p = 0.479、s = 2.45 → 1.40，和实测 2.61 / 1.82 ≈ 1.43 吻合。先改占比大的。</p>
+<p>口诀：找最大的块改一处再测。</p>
+</details>
+<h3 id="p86-trace-item-synchronize-nccl">P86 · 时间线（trace）上看到这几种现象各说明什么：大段空白、长条 item / synchronize、密密麻麻细条、没重叠的 nccl？</h3>
+<p>来源：<a href="lessons/24-profiler.html">第 24 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>GPU 大段空白 → 在等（数据、同步、CPU 下单慢）；CPU 上长条 <code>aten::item</code> / <code>cudaStreamSynchronize</code> → 同步点；GPU 上密密麻麻细条 → 小 kernel 多、launch 受限（compile / CUDA Graph）；<code>ncclKernel</code> 长条且和计算不重叠 → 通信没藏住。更细用 Nsight Systems + NVTX 标记。</p>
+<p>口诀：时间线上找空白、找细条、找没藏住的 NCCL。</p>
+</details>
+<h3 id="p87-gpu">P87 · 怎么量出 GPU 有多少时间在等数据？测量时要注意什么？</h3>
+<p>来源：<a href="lessons/25-input-sync.html">第 25 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>每步拆两段计时：拿到 batch 前后（等数据）和训练这一步（计算，测量时末尾 synchronize）。例：等 18 ms、算 30 ms → 37.5% 在等。数据段接近 0 就别优化数据。</p>
+<p>测量用的 <code>synchronize()</code> 本身是同步点，测完要删。</p>
+<p>口诀：先拆两段计时，数据不慢别瞎改。</p>
+</details>
+<h3 id="p88-llm">P88 · 数据从硬盘到显存的四段路是什么？各怎么提速？LLM 预训练的标准做法？</h3>
+<p>来源：<a href="lessons/25-input-sync.html">第 25 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>① 读取（打包成大分片、本地缓存、memmap）② 解码 / 增强 / 分词（离线预处理、num_workers、GPU 上增强）③ 拼 batch（<code>__getitem__</code> 直接返回张量）④ 拷进显存（pin_memory + non_blocking，或另一条 stream 预取）。</p>
+<p>LLM：提前把语料分词成 uint16 / uint32 token 数组存盘，训练时 memmap 打开随机切定长片段，前三段几乎消失。</p>
+<p>口诀：读取、处理、拼盘、拷贝四段路，能离线就离线。</p>
+</details>
+<h3 id="p89">P89 · 训练循环里同步点常藏在哪？怎么一次性找出来、怎么改？</h3>
+<p>来源：<a href="lessons/25-input-sync.html">第 25 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>日志里每步 <code>.item()</code>、准确率 <code>.item()</code>、裁剪后看范数的 if、布尔索引 / nonzero / unique、库函数内部的 <code>.cpu()</code>。</p>
+<p>CUDA 上 <code>torch.cuda.set_sync_debug_mode("warn")</code>（或 "error"）遇到同步就报。改法：指标在 GPU 上累计 <code>running += loss.detach()</code>，每 N 步才 <code>.item()</code>；if 改 where；数据相关形状改固定形状 + mask。</p>
+<p>口诀：同步点藏在日志和指标里，sync_debug_mode 帮你找。</p>
+</details>
+<h3 id="p90-cuda-stream-record_stream">P90 · 怎么用 CUDA stream 预取下一批数据？<code>record_stream</code> 是干什么的？</h3>
+<p>来源：<a href="lessons/25-input-sync.html">第 25 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>在另一条 stream 上 <code>x.cuda(non_blocking=True)</code> 拷下一批；用之前 <code>current_stream().wait_stream(copy_stream)</code>；然后对拷来的张量 <code>t.record_stream(current_stream())</code>，再开始拷下一批。</p>
+<p>record_stream 告诉缓存分配器：这块在拷贝 stream 上分配的显存，主 stream 还在用，别提前回收给别人。</p>
+<p>口诀：第二条 stream 提前拷下一批，用前 wait_stream，再 record_stream。</p>
+</details>
+<h3 id="p91-fp32bf16fp16fp8-e4m3-1">P91 · 浮点格式里指数位和尾数位各管什么？fp32、bf16、fp16、FP8 E4M3 的最大值和 1 附近间隔？</h3>
+<p>来源：<a href="lessons/26-mixed-precision.html">第 26 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>指数位管<strong>范围</strong>，尾数位管<strong>精度</strong>。</p>
+<p>fp32（1/8/23）：max 3.4e38、eps 1.2e−7；bf16（1/8/7）：max 3.4e38、eps <strong>0.0078</strong>；fp16（1/5/10）：max <strong>65504</strong>、eps 0.00098、最小正规数 6.1e−5；E4M3（1/4/3）：max 448、eps 0.125。</p>
+<p>1.001 → bf16 是 1.0、fp16 是 1.001；3.14159 → E4M3 是 3.25。</p>
+<p>口诀：指数管范围、尾数管精度；bf16 宽而粗，fp16 细而窄。</p>
+</details>
+<h3 id="p92-fp16-gradscalerbf16">P92 · fp16 训练为什么需要 GradScaler？它怎么工作？bf16 为什么不用？</h3>
+<p>来源：<a href="lessons/26-mixed-precision.html">第 26 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>fp16 范围小：上溢（&gt; 65504 变 inf）、下溢（小梯度变 0，实测 1e−8 转 fp16 = 0）。</p>
+<p>GradScaler：loss 乘大数（如 65536）→ 梯度跟着放大躲开下溢（实测 1e−8 × 65536 转 fp16 = 0.00066）→ 更新前除回来；出现 inf 就跳过这步并调小倍数。写法：<code>scale(loss).backward()</code> → <code>unscale_(opt)</code> → 裁剪 → <code>step</code> → <code>update</code>。</p>
+<p>bf16 指数位和 fp32 一样，范围够，不需要。</p>
+<p>口诀：fp16 梯度会下溢，GradScaler 先放大再除回。</p>
+</details>
+<h3 id="p93-tf32">P93 · TF32 是什么？怎么打开？能快多少？</h3>
+<p>来源：<a href="lessons/26-mixed-precision.html">第 26 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>Ampere 以后张量核心上的格式：fp32 输入在乘法时只保留 10 位尾数、8 位指数，<strong>累加仍 fp32</strong>。<code>torch.set_float32_matmul_precision("high")</code> 打开（默认 "highest" 是真 fp32）。H100 上 fp32 约 67 TFLOPS，TF32 约 494 TFLOPS（稠密），约 7 倍，对训练几乎没影响。</p>
+<p>口诀：fp32 一行开 TF32。</p>
+</details>
+<h3 id="p94-fp8">P94 · FP8 训练难在哪？怎么解决？惯例是怎么分配格式的？</h3>
+<p>来源：<a href="lessons/26-mixed-precision.html">第 26 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>E4M3 最大 448、间隔粗，大了溢出、小了丢失。靠<strong>缩放系数</strong>：per-tensor → 细粒度块（DeepSeek-V3：激活 1 × 128、权重 128 × 128 一个系数，离群值只影响一块）→ MX 格式（每 32 个数共享指数，Blackwell 原生）。</p>
+<p>惯例：前向 E4M3、反向梯度 E5M2；主权重、优化器状态、累加仍用 fp32 / bf16。H100 FP8 峰值约 bf16 的 2 倍。</p>
+<p>口诀：FP8 再快一倍，靠缩放系数，粒度越细越稳。</p>
+</details>
+<h3 id="p95">P95 · 训练显存由哪几块组成？为什么长序列时激活常比参数还大？</h3>
+<p>来源：<a href="lessons/27-memory.html">第 27 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>模型状态（混合精度 AdamW 约 16Ψ）、<strong>激活</strong>（为反向存下的中间结果，随 b·s·h·L 增长）、临时缓冲、碎片。</p>
+<p>每层激活 ≈ s·b·h·(34 + 5as/h) 字节（第二项来自 attention 分数表，Flash 后几乎没了）。7B（h = 4096、32 层）、b = 1、s = 4096：每层约 570 MB，32 层约 18 GB，而 bf16 参数才 14 GB；序列翻倍激活翻倍。</p>
+<p>口诀：显存四块：模型状态十六 Ψ、激活随 b s h L、临时和碎片。</p>
+</details>
+<h3 id="p96-checkpoint">P96 · 激活重计算（checkpoint）怎么省显存？代价多大？什么是选择性重计算？</h3>
+<p>来源：<a href="lessons/27-memory.html">第 27 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>checkpoint(block, h, use_reentrant=False)</code>：前向只存每块的<strong>输入</strong>，反向时把这块的前向再跑一遍拿到中间结果。实测 8 个 MLP 块：存下的激活 9.125 MB → 1.125 MB。</p>
+<p>代价：多一次前向，总计算从 3F 变 4F，多约 1/3。选择性重计算只重算"大但便宜"的（如 softmax 输出），矩阵乘输出照样存；FlashAttention 本身就在反向里重算分数表。</p>
+<p>口诀：重计算只存每块输入，反向再跑一遍前向，多三分之一算力。</p>
+</details>
+<h3 id="p97-oom">P97 · OOM 时怎么看清显存被谁占了？正常的显存曲线长什么样？</h3>
+<p>来源：<a href="lessons/27-memory.html">第 27 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>torch.cuda.memory._record_memory_history()</code> → 跑几步 → <code>_dump_snapshot("snap.pickle")</code> → 拖进 pytorch.org/memory_viz，每块分配都能点出是哪行代码。快速看用 <code>max_memory_allocated()</code>、<code>memory_summary()</code>。</p>
+<p>正常形状：前向一路上升（激活越存越多），峰值在前向结束处，反向一路下降，优化器 step 再有一个小台阶。</p>
+<p>口诀：OOM 先录快照看是谁；前向涨、反向落。</p>
+</details>
+<h3 id="p98-oom">P98 · OOM 了按什么顺序去省显存？</h3>
+<p>来源：<a href="lessons/27-memory.html">第 27 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>1 bf16 混合精度（激活减半）→ 2 FlashAttention / SDPA（去掉 s × s 表）→ 3 减 micro-batch + 梯度累积 → 4 选择性 / 全量重计算 → 5 FSDP / ZeRO（切模型状态）→ 6 融合 cross-entropy（不写出 b × s × V 的 logits）→ 7 CPU offload（最后手段）；另外 <code>expandable_segments:True</code> 减碎片。</p>
+<p>口诀：bf16、Flash、减 batch、重计算、FSDP，offload 最后。</p>
+</details>
+<h3 id="p99-40-eager-compile">P99 · 40 个小算子的函数，eager 和 compile 实测差多少？省在哪？</h3>
+<p>来源：<a href="lessons/28-compile-graphs.html">第 28 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>本机 CPU：eager 约 30.7 µs / 次，compile 约 3.8 µs，快约 8 倍；40 个算子融成一个 <code>cpp_fused_add_mul_0</code>。省的是"每个算子过一遍 Python 和分派器"的下单开销，不是算得更快。GPU 上即使融合了，每个 kernel 还要一次 launch，CUDA Graph 再解决这一层。</p>
+<p>口诀：小算子多时下单比做菜贵，compile 融合减单数。</p>
+</details>
+<h3 id="p100-compile">P100 · 训练里 compile 套在哪一层？怎么避免重编译？</h3>
+<p>来源：<a href="lessons/28-compile-graphs.html">第 28 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>大模型常用<strong>区域编译</strong>：每个 Transformer 块单独 <code>compile()</code>，结构相同的块只编一次、全部复用，冷启动快很多（块之间不能融合）。也可以单独编 loss / 优化器。</p>
+<p>避免重编译：变长输入补齐分桶或 <code>torch._dynamo.mark_dynamic(x, dim)</code>；别在编译区读会变的 Python 全局变量；用 <code>TORCH_LOGS=recompiles</code> 查原因。</p>
+<p>口诀：大模型按块区域编，同构只编一次，变长输入补齐分桶。</p>
+</details>
+<h3 id="p101-cuda-graph">P101 · CUDA Graph 是什么？怎么用？有哪些限制？</h3>
+<p>来源：<a href="lessons/28-compile-graphs.html">第 28 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>把一串 kernel <strong>录成一张图</strong>，之后一次 launch 重放。手动：<code>g = torch.cuda.CUDAGraph()</code>，热身后 <code>with torch.cuda.graph(g): static_y = model(static_x)</code>；每次 <code>static_x.copy_(batch)</code>、<code>g.replay()</code>、从 <code>static_y</code> 读。</p>
+<p>限制：形状固定；输入输出地址固定；图里不能有同步点和 CPU 逻辑；录的时候不能新分配显存；随机数要特殊处理。省事的办法：<code>torch.compile(mode="reduce-overhead")</code>。</p>
+<p>口诀：CUDA Graph 录一次套餐号，形状地址要固定、不能同步和新分配。</p>
+</details>
+<h3 id="p102-cuda-graph">P102 · 什么场景值得上 CUDA Graph？怎么从时间线上判断？</h3>
+<p>来源：<a href="lessons/28-compile-graphs.html">第 28 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>小模型 / 小 batch 训练、<strong>LLM 推理 decode</strong>（每步几百个小 kernel）：每个 kernel 的 GPU 时间小于 CPU 下单时间，launch 受限。大 batch 训练收益小，主要靠融合。</p>
+<p>时间线上 GPU 那排是<strong>密密麻麻的细条、中间有空隙</strong>，就是 launch 受限的信号。</p>
+<p>口诀：细条加空隙就该上 CUDA Graph。</p>
+</details>
+<hr />
+<h2 id="2936">推理优化与融合开发（第 29–36 章）</h2>
+<h3 id="p103-roofline-kernel">P103 · roofline 模型：一个 kernel 的时间下限怎么算？什么是算术强度和拐点？</h3>
+<p>来源：<a href="lessons/29-why-fusion.html">第 29 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>t ≥ max(运算次数 / 峰值算力, 读写字节 / 带宽)。算术强度 I = FLOPs / 字节；拐点 = 峰值 / 带宽（H100 约 989 TFLOPS / 3.35 TB/s ≈ 295；本机 Mac GPU 约 29）。I 低于拐点是<strong>访存受限</strong>，高于是<strong>算力受限</strong>。</p>
+<p>口诀：时间看两笔，谁大谁是瓶颈；强度低于拐点就是访存受限。</p>
+</details>
+<h3 id="p104">P104 · 常见算子的算术强度大约多少？哪些是访存受限？</h3>
+<p>来源：<a href="lessons/29-why-fusion.html">第 29 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>fp32 <code>x + y</code>：1 次运算 / 12 字节 ≈ 0.08；GELU ≈ 1；LayerNorm / softmax ≈ 1–2：都远低于拐点，访存受限。bf16 n × n 矩阵乘 ≈ n/3（n = 4096 时 1365），算力受限。</p>
+<p>结论：Transformer 里除了矩阵乘，几乎所有算子（偏置、激活、残差、norm、softmax、dropout、RoPE）时间只看读写字节数。</p>
+<p>口诀：矩阵乘吃算力，其余算子吃带宽。</p>
+</details>
+<h3 id="p105-mps">P105 · 融合为什么能变快？本章 MPS 实测的数字是什么？</h3>
+<p>来源：<a href="lessons/29-why-fusion.html">第 29 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>融合让中间结果不落显存，读写字节变少。<code>gelu(x + b) * s</code>（2²⁴ 个 float）：eager 3 个 kernel 读写 8 个张量 537 MB、1.14 ms；compile 1 个 kernel 读写 4 个张量 268 MB、0.57 ms。两者<strong>有效带宽都约 471 GB/s</strong>——带宽不变、字节减半、时间减半。fused AdamW、FlashAttention、融合 CE 同一个原理。</p>
+<p>口诀：融合不让中间结果落显存，带宽不变字节减半时间减半。</p>
+</details>
+<h3 id="p106-kernel">P106 · 要不要手写一个融合 kernel，按什么步骤判断？</h3>
+<p>来源：<a href="lessons/29-why-fusion.html">第 29 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>1 profiler 里占比多少（&lt; 5% 别管）→ 2 是不是访存受限 → 3 compile 是不是已经融了（看生成代码）→ 4 离理论最快差多少：理论最快 = 必须读写字节 ÷ 带宽 → 5 差得多又 compile 融不了（特殊规约、在线 softmax、反量化 + matmul）才手写 Triton。</p>
+<p>例：(8192, 4096) bf16 LayerNorm 必须读写 128 MiB，H100 理论约 40 µs；实测 150 µs 值得优化，50 µs 就别折腾。</p>
+<p>口诀：手写之前先算离理论最快还差多少。</p>
+</details>
+<h3 id="p107-evalno_gradinference_mode-no_grad">P107 · 推理时 eval、no_grad、inference_mode 各关掉了什么？什么时候只能用 no_grad？</h3>
+<p>来源：<a href="lessons/30-inference-mode.html">第 30 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>eval：切换 Dropout / BN 行为；no_grad：不记账；inference_mode：no_grad 的全部，再加上新张量不带 Autograd 标签、不记版本号，更快。</p>
+<p>inference_mode 里的张量之后不能参与要求导的计算（实测报 <code>Inference tensors cannot be saved for backward</code>）；推理结果还要拿去训练（如 RL 采样后算 loss）时用 no_grad。</p>
+<p>口诀：推理开 eval 加 inference_mode。</p>
+</details>
+<h3 id="p108-kv-cache-cache-t-token-token">P108 · KV cache 是什么原理？不带 cache 生成 T 个 token 要算多少次 token？</h3>
+<p>来源：<a href="lessons/30-inference-mode.html">第 30 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>因果 attention 里前面的 token 看不到后面的，所以旧 token 的 K、V 每一步都一样。每层把 K、V 存下来，新 token 只算自己的 q、k、v，q 和整个 cache 做 attention（实测和一次性因果 attention 结果一致）。</p>
+<p>不带 cache：第 t 步重算 t 个，累计 T(T + 1)/2，O(T²)；带 cache：T 次。</p>
+<p>口诀：因果 attention 旧 KV 不变，存进 cache 每步只算新 token。</p>
+</details>
+<h3 id="p109-kv-cache-token-llama-2-7b-gqa">P109 · KV cache 每个 token 占多少？Llama-2-7B 呢？GQA 怎么省？</h3>
+<p>来源：<a href="lessons/30-inference-mode.html">第 30 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>每 token = 2 × 层数 × KV 头数 × 每头维度 × 每数字节。Llama-2-7B（32 层、32 头、128 维、fp16）：2 × 32 × 32 × 128 × 2 = 524288 字节 = <strong>0.5 MB</strong>，4096 token 一条就 2 GiB。</p>
+<p>GQA（分组查询注意力）：几个 q 头共用一组 K、V 头。Llama-3-8B 只有 8 个 KV 头，每 token 128 KB，是 1/4。</p>
+<p>口诀：每 token cache 是 2 乘层乘 KV 头乘头维乘字节，GQA 共享省几倍。</p>
+</details>
+<h3 id="p110-prefill-decode-batch-1-decode">P110 · prefill 和 decode 有什么不同？batch 1 decode 的速度上限怎么算？</h3>
+<p>来源：<a href="lessons/30-inference-mode.html">第 30 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>prefill 一次处理整段提示词，矩阵乘大，<strong>算力受限</strong>；decode 每次 1 个 token，每生成一个 token 都要把全部权重读一遍，<strong>访存受限</strong>。</p>
+<p>上限 ≈ 带宽 ÷ 权重字节：7B bf16（14 GB）在 H100（3.35 TB/s）上约 <strong>240 tok/s</strong>。提速方向：量化减少字节、增大 batch 一次读多次用、CUDA Graph 去 launch 开销。</p>
+<p>口诀：prefill 吃算力、decode 吃带宽，上限是带宽除以权重字节。</p>
+</details>
+<h3 id="p111-kv-cache-cuda-graph-cache">P111 · 为什么普通 KV cache 不能录 CUDA Graph？静态 cache 怎么做？</h3>
+<p>来源：<a href="lessons/30-inference-mode.html">第 30 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>普通写法每步 <code>torch.cat</code> 变长、新分配显存，形状和地址都在变。静态 cache：一开始按最大长度预分配 (B, H, T_max, d)，每步按下标把新 k、v <strong>写进</strong>第 t 个位置，attention 用 mask 只看前 t 个；形状地址不变，整个 decode 一步用 <code>torch.compile(mode="reduce-overhead")</code> 录成 CUDA Graph（gpt-fast 的做法；HF 的 <code>cache_implementation="static"</code>）。</p>
+<p>口诀：静态 cache 才能录 CUDA Graph。</p>
+</details>
+<h3 id="p112-torchcompile">P112 · 怎么拿到 torch.compile 生成的代码？生成代码的结构是什么？</h3>
+<p>来源：<a href="lessons/31-read-inductor.html">第 31 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>torch._inductor.utils.run_and_get_code(torch.compile(f), x)</code> 直接拿；<code>TORCH_LOGS=output_code</code> 打印；<code>TORCH_COMPILE_DEBUG=1</code> 把 FX 图、ATen 图、生成代码都落盘。</p>
+<p>结构：若干 kernel 定义（GPU 上 Triton、CPU 上 C++、Mac GPU 上 Metal）+ 一个 <code>call(args)</code> 按顺序调用它们和外部库。</p>
+<p>口诀：拿代码：run_and_get_code、output_code、COMPILE_DEBUG。</p>
+</details>
+<h3 id="p113-inductor-kernel-softmax-geluxwb">P113 · Inductor 的 kernel 名字怎么读？本章 softmax 和 gelu(x@w+b) 实测各生成了什么？</h3>
+<p>来源：<a href="lessons/31-read-inductor.html">第 31 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>&lt;后端&gt;_fused_&lt;被融进来的算子，按字母排&gt;_&lt;编号&gt;</code>。</p>
+<p><code>softmax(x * 2)</code> → 一个 <code>cpp_fused__softmax_abs_all_amax_eq_mul_ne_sub_0</code>（mul、amax、sub、softmax 全在里面，abs/all/eq/ne 是全 −∞ 行的检查），循环体用 <code>at::vec::Vectorized</code> 向量化。</p>
+<p><code>gelu(x @ w + b)</code> → <code>extern_kernels.addmm</code>（矩阵乘 + 偏置交给库）+ <code>cpp_fused_gelu_0</code>。</p>
+<p>口诀：名字里列着融进去的算子，矩阵乘走 extern 调库。</p>
+</details>
+<h3 id="p114-call">P114 · 读生成代码的 <code>call</code> 函数要看哪三样？</h3>
+<p>来源：<a href="lessons/31-read-inductor.html">第 31 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>① kernel 数（fused 调用 + extern 调用）；② 中间缓冲区数（每个 <code>empty_strided</code> 都是要写进显存的 buf，越少越好）；③ 多余的拷贝（<code>clone</code>、<code>copy_</code>、<code>as_strided</code>，常因不连续输入或原地修改）。GPU 上 Triton kernel 前的 autotune 列表是自动调参的候选块大小。</p>
+<p>口诀：数 kernel、数 buf、找 clone。</p>
+</details>
+<h3 id="p115-inductor">P115 · Inductor 自动融合做不到的典型情况有哪些？</h3>
+<p>来源：<a href="lessons/31-read-inductor.html">第 31 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>要改算法的融合：attention 的"矩阵乘 + softmax + 矩阵乘"（用 SDPA / FlexAttention）、巨大 logits 的融合 cross-entropy（Liger-Kernel）、int4 反量化 + 矩阵乘（torchao kernel）、被断图切开的部分、奇怪的访存模式。判断标准是生成 kernel 的有效带宽离硬件上限多远。</p>
+<p>口诀：改算法级的融合，compile 不会，用库或手写。</p>
+</details>
+<h3 id="p116-triton-kernel-cuda-c-kernel">P116 · Triton 写 kernel 和 CUDA C++ 写 kernel 最大的思路差别是什么？</h3>
+<p>来源：<a href="lessons/32-triton-model.html">第 32 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>CUDA（SIMT）写<strong>一个线程</strong>的代码，自己管线程编号、warp、共享内存、同步。Triton（块级 SPMD）写<strong>一个 program</strong> 的代码，一次处理一整块数据（像 numpy 一样整块运算），块内线程怎么分工、共享内存、合并访存交给编译器。一个 program 大致对应一个线程块。</p>
+<p>口诀：CUDA 写一个线程，Triton 写一个 program 管一块。</p>
+</details>
+<h3 id="p117-triton-kernel-n-2500block-1024-grid-program">P117 · Triton kernel 的五个零件是什么？n = 2500、BLOCK = 1024 时 grid 和最后一个 program 是什么情况？</h3>
+<p>来源：<a href="lessons/32-triton-model.html">第 32 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>tl.program_id(0)</code>（第几个 program）、<code>tl.arange(0, BLOCK)</code>（下标向量，BLOCK 是 constexpr）、<code>offs = pid * BLOCK + arange</code>、<code>mask = offs &lt; n</code>、<code>tl.load</code> / <code>tl.store</code>（整块读写，mask 挡越界）。启动 <code>kernel(cdiv(n, BLOCK),)</code>。</p>
+<p>cdiv(2500, 1024) = 3 个 program；最后一个 offs 2048–3071，mask 为真 452 个、挡住 572 个。</p>
+<p>口诀：program_id 定位，arange 拿下标，mask 挡越界，load、store 整块读写。</p>
+</details>
+<h3 id="p118-softmaxnorm-triton-softmax">P118 · 行规约（softmax、norm）在 Triton 里怎么组织？softmax 的越界位置为什么补 −∞？</h3>
+<p>来源：<a href="lessons/32-triton-model.html">第 32 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>一个 program 处理一整行，grid = 行数；BLOCK ≥ 行长取 2 的幂；块内 <code>tl.max</code>、<code>tl.sum</code> 规约，一行读一次写一次。</p>
+<p>越界位置补规约的"中性值"：softmax 补 −∞，因为 exp(−∞) = 0 不影响求和；若补 0，exp(0) = 1 会把分母弄错。求和补 0、求最大补 −∞。</p>
+<p>口诀：行规约一行一个 program，越界补不影响结果的值。</p>
+</details>
+<h3 id="p119-tritonautotune">P119 · <code>@triton.autotune</code> 怎么用？调的是哪些参数？</h3>
+<p>来源：<a href="lessons/32-triton-model.html">第 32 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>@triton.autotune(configs=[triton.Config({"BLOCK": b}, num_warps=w) ...], key=["n"])</code> 放在 <code>@triton.jit</code> 上面。第一次调用把所有配置跑一遍挑最快，<code>key</code> 里的参数变了再重挑。调 BLOCK（块大小）、num_warps（一个 program 用几组 32 线程）、num_stages（流水线级数）。</p>
+<p>口诀：块大小交给 autotune。</p>
+</details>
+<h3 id="p120-kernel-python">P120 · 自己写的 kernel 直接包成 Python 函数调用，有什么问题？</h3>
+<p>来源：<a href="lessons/33-custom-op.html">第 33 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>PyTorch 的几个系统都不认识它：Autograd 没有反向公式（梯度断了）；torch.compile 钻进去追踪，遇到看不懂的就断图或出错；torch.export 导不出；分派器不能按设备分派、vmap 等变换处理不了。注册成算子才进入分派表，和 <code>aten::mm</code> 平起平坐。</p>
+<p>口诀：直接调用没人认，注册进分派表才算正式算子。</p>
+</details>
+<h3 id="p121-torchlibrarycustom_op-register_fake">P121 · <code>torch.library.custom_op</code> 怎么写？<code>register_fake</code> 是干什么的？</h3>
+<p>来源：<a href="lessons/33-custom-op.html">第 33 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>@torch.library.custom_op("ns::name", mutates_args=())</code>：名字是"命名空间::算子名"；<strong>类型标注就是 schema</strong>，必须写；<code>mutates_args</code> 声明会原地修改哪些输入。注册后也出现在 <code>torch.ops.ns.name</code>。</p>
+<p><code>@op.register_fake</code>：只返回输出"长什么样"（形状、dtype、设备）。compile / export 用假张量推形状，算子是黑盒，必须靠它；实测没有 fake 时 compile 报 <code>TorchRuntimeError</code>（fake tensor 错），有了以后 graphs 1、breaks 0。</p>
+<p>口诀：custom_op 写签名、声明改了谁，register_fake 只报形状。</p>
+</details>
+<h3 id="p122-register_autograd-add_relu">P122 · <code>register_autograd</code> 怎么写？本章 add_relu 的梯度是多少？</h3>
+<p>来源：<a href="lessons/33-custom-op.html">第 33 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>op.register_autograd(backward, setup_context=setup_context)</code>：setup_context(ctx, inputs, output) 存反向要用的东西；backward(ctx, grad) 对每个输入返回一个梯度。</p>
+<p>add_relu(x, y)：x = [−2, 1, 3]、y = [1, −3, 1] → 输出 [0, 0, 4]；反向 <code>grad * (out &gt; 0)</code>，两个输入的梯度都是 [0, 0, 1]（加法对两边倍数都是 1）。挂在注册过的算子上，compile 也能正确处理反向。</p>
+<p>口诀：register_autograd 存东西给梯度。</p>
+</details>
+<h3 id="p123-opcheck-triton-kernel-triton_op">P123 · <code>opcheck</code> 检查什么？它能保证数值正确吗？Triton kernel 为什么用 <code>triton_op</code>？</h3>
+<p>来源：<a href="lessons/33-custom-op.html">第 33 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>四项：test_schema（签名和实际行为一致）、test_autograd_registration（需要的反向注册了）、test_faketensor（fake 输出和真实一致）、test_aot_dispatch_dynamic（AOTAutograd 动态形状能处理）。<strong>不查数值</strong>，数值用 <code>assert_close</code> 对参考实现、反向用 gradcheck。</p>
+<p><code>triton_op</code> + <code>wrap_triton(kernel)grid</code>：custom_op 对编译器是黑盒，triton_op 让 Inductor 看得到里面的 Triton kernel，一起调度优化。</p>
+<p>口诀：opcheck 查注册，assert_close 查数值；Triton 用 triton_op。</p>
+</details>
+<h3 id="p124-c-cuda-compile-triton">P124 · 什么时候需要写 C++ / CUDA 扩展，而不是 compile 或 Triton？</h3>
+<p>来源：<a href="lessons/34-cpp-extension.html">第 34 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>先 compile 自动融合，再 Triton；需要 CUTLASS / CuTe、PTX 内联汇编、warp 级精细控制，要包装现成 C++ / CUDA 库，CPU 特殊实现，或部署时不想依赖 Python，才写 C++ / CUDA 扩展（FlashAttention、DeepGEMM、vLLM 的很多 kernel 是这样接进来的）。</p>
+<p>口诀：先 compile、再 Triton，要 CUTLASS、PTX、包装库才写 C++。</p>
+</details>
+<h3 id="p125-c">P125 · C++ 扩展的三段是什么？和分派表的行、列怎么对应？</h3>
+<p>来源：<a href="lessons/34-cpp-extension.html">第 34 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>① 实现：普通 C++ 函数（<code>TORCH_CHECK</code> 检查、<code>contiguous()</code> 后取 <code>data_ptr</code>、<code>at::parallel_for</code> 多线程）；② <code>TORCH_LIBRARY(ns, m) { m.def("op(Tensor x, Tensor y) -&gt; Tensor"); }</code> 声明签名 = 分派表<strong>加一行</strong>；③ <code>TORCH_LIBRARY_IMPL(ns, CPU, m) { m.impl("op", &amp;fn); }</code> 按设备登记 = <strong>填一列</strong>（有 CUDA 实现再写一个 IMPL）。fake 和反向可在 Python 里补。</p>
+<p>口诀：实现 + TORCH_LIBRARY 加一行 + TORCH_LIBRARY_IMPL 按设备填一列。</p>
+</details>
+<h3 id="p126-load_inline-setuppy">P126 · load_inline 和 setup.py 两种构建方式怎么选？本机踩到了什么坑？</h3>
+<p>来源：<a href="lessons/34-cpp-extension.html">第 34 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p><code>load_inline</code> / <code>load</code>：Python 里传源码，第一次调用时即时编译（本机约 5–7 秒），适合实验和学习；<code>setup.py</code> + <code>CppExtension</code> / <code>CUDAExtension</code>：<code>pip install .</code> 预编译，适合发布。都需要 ninja 和 C++ 编译器（CUDA 还要 nvcc）。</p>
+<p>坑：<code>pip install ninja</code> 后仍报 "Ninja is required"——ninja 在 <code>.venv/bin</code>，不在 PATH 上。</p>
+<p>口诀：load_inline 学习、setup.py 发布，ninja 要在 PATH。</p>
+</details>
+<h3 id="p127-relux-y">P127 · 本章 relu(x + y) 四种实现的实测时间是多少？有哪三个教训？</h3>
+<p>来源：<a href="lessons/34-cpp-extension.html">第 34 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>2²⁴ 个 float32，本机 6 线程：eager 1.75 ms、C++ -O0 <strong>107.4 ms</strong>、C++ -O3 1.70 ms、torch.compile <strong>1.18 ms</strong>。</p>
+<p>教训：① 编译选项第一位，不优化慢 63 倍，显式写 <code>extra_cflags=["-O3"]</code>；② 融合了不等于快，手写的标量循环要靠编译器向量化、分块也没调；③ 手写前先测 compile，这里它比手写快 30%。</p>
+<p>口诀：-O3 先写对，手写不自动赢，三方实测再定。</p>
+</details>
+<h3 id="p128-06-02-10-int8-int4">P128 · 对称量化怎么算？[−0.6, 0.2, 1.0] 量化成 int8 和 int4 各是什么？</h3>
+<p>来源：<a href="lessons/35-quant-export.html">第 35 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>s = max|w| / (2^(b−1) − 1)，q = round(w / s)，还原 ŵ = q × s。</p>
+<p>int8：s = 1/127，q = [−76, 25, 127]，还原 [−0.598, 0.197, 1.0]，最大误差 0.003。int4：s = 1/7，q = [−4, 1, 7]，还原 [−0.571, 0.143, 1.0]，最大误差 0.057。int4 格子粗 18 倍，要<strong>分组</strong>（每 32 / 64 / 128 个共用一个 s）。</p>
+<p>口诀：s 等于最大绝对值除以 127，存 round(w/s)，用时乘回 s。</p>
+</details>
+<h3 id="p129-weight-only-llm-decode-weight-only">P129 · weight-only 量化和动态激活量化有什么区别？为什么 LLM decode 偏爱 weight-only？</h3>
+<p>来源：<a href="lessons/35-quant-export.html">第 35 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>weight-only：只把权重存成 int8 / int4，计算时反量化回 bf16 再乘；动态激活：激活也按当前值现算缩放量化，做 int8 × int8 矩阵乘。</p>
+<p>decode 访存受限，速度上限 = 带宽 ÷ 权重字节，权重字节变少直接提速（bf16 → int4 理论 ×4，实际 2–3 倍）。实测 torchao <code>Int8WeightOnlyConfig</code>：8.01 → 2.02 MB，输出相对误差 0.56%，权重变成 <code>Int8Tensor</code> 张量子类。</p>
+<p>口诀：decode 吃带宽，weight-only 最划算。</p>
+</details>
+<h3 id="p130-torchexport-torchcompile">P130 · <code>torch.export</code> 和 <code>torch.compile</code> 有什么区别？动态维度怎么声明？</h3>
+<p>来源：<a href="lessons/35-quant-export.html">第 35 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>compile 边跑边编，允许断图回 Python；export 要<strong>一张完整的图</strong>，抓不下就报错，输出 <code>ExportedProgram</code>（参数 + ATen 算子图，可序列化）。实测两层 MLP 导出成 linear → gelu → linear。</p>
+<p>默认按示例输入固定形状；变的维度：<code>Dim("batch", min=1, max=64)</code>，<code>dynamic_shapes={"input": {0: batch}}</code>。自定义算子要有 fake 实现。</p>
+<p>口诀：export 抓整图、抓不下就报错，Dim 声明会变的维。</p>
+</details>
+<h3 id="p131-aotinductor">P131 · AOTInductor 是什么？部署路线怎么选？</h3>
+<p>来源：<a href="lessons/35-quant-export.html">第 35 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>用 Inductor <strong>提前</strong>把 ExportedProgram 编成机器码打成 <code>.pt2</code> 包：<code>aoti_compile_and_package(ep)</code>，Python 里 <code>aoti_load_package(path)</code> 或 C++ 里加载（不需要 Python）。实测打包约 4 秒，batch 5 输入能跑、结果一致。</p>
+<p>路线：Python 服务要最快 → compile（+ CUDA Graph）；C++ 服务 → export + AOTInductor；手机 / 嵌入式 → ExecuTorch；LLM 在线服务 → vLLM / SGLang。</p>
+<p>口诀：AOTInductor 提前编成 .pt2，C++ 也能跑。</p>
+</details>
+<h3 id="p132-kernel">P132 · 测 kernel 时间有哪四个坑？</h3>
+<p>来源：<a href="lessons/36-bench-correctness.html">第 36 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>① 没热身：首次慢很多（实测 2.43 ms vs 之后中位 0.42 ms）；② 没同步（GPU）：只测到下单；③ 只测一次：波动大，要多次取<strong>中位数</strong>看 IQR；④ 线程数不一致：<code>torch.utils.benchmark.Timer</code> 默认 <code>num_threads=1</code>（实测 0.70 ms vs 6 线程 0.42 ms）。GPU 上用 <code>triton.testing.do_bench</code>，还会清 L2 缓存。</p>
+<p>口诀：先热身、要同步、多次取中位、线程数一致。</p>
+</details>
+<h3 id="p133-relux-y222-float32070-ms">P133 · 有效带宽怎么算？relu(x + y)（2²² 个 float32）0.70 ms 时是多少？</h3>
+<p>来源：<a href="lessons/36-bench-correctness.html">第 36 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>有效带宽 = <strong>必须</strong>读写的字节 ÷ 实测时间。relu(x + y) 读 x、y 写结果：3 × 2²² × 4 = 50.3 MB，÷ 0.70 ms ≈ 72 GB/s。和硬件峰值比才知好坏，GPU 上好 kernel 能到 80–90%；分子用"必须"的字节，kernel 多读写了就会暴露。</p>
+<p>口诀：有效带宽是必须字节除以时间，和峰值比才知好坏。</p>
+</details>
+<h3 id="p134-assert_close-kernel">P134 · <code>assert_close</code> 的判定公式和默认容差？低精度 kernel 应该和什么比？</h3>
+<p>来源：<a href="lessons/36-bench-correctness.html">第 36 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>|a − b| ≤ atol + rtol × |b|。默认：float32 rtol 1.3e−6、atol 1e−5（实测 1.0 上加 1e−5 过、1e−3 不过）；bfloat16 rtol 1.6e−2、atol 1e−5（0.016 过、0.03 不过）；float16 rtol 1e−3。</p>
+<p>参考实现用<strong>高精度</strong>（fp32 / fp64）算；新 kernel 的误差不应明显大于"参考实现也用低精度跑"的误差；反向也要比（gradcheck 或对参考梯度）。</p>
+<p>口诀：assert_close 按 dtype 定容差，参考用高精度、反向也要比。</p>
+</details>
+<h3 id="p135-kernel-kernel">P135 · 新 kernel 的测试矩阵要覆盖哪些维度？一个融合 kernel 的完整生命周期是哪八步？</h3>
+<p>来源：<a href="lessons/36-bench-correctness.html">第 36 章</a> · 加入 2026-11-15 · 复习记录：</p>
+<details>
+<summary>答案</summary>
+<p>形状（整除和<strong>不整除</strong> BLOCK、很小、很大）、dtype、<strong>内存布局</strong>（连续、转置 / 切片后不连续、有 offset——实测假设连续的读法会把 [0, 3, 1, 4, 2, 5] 读成 [0, 1, 2, 3, 4, 5]）、边界数值（0、大数、−inf、NaN）、eager 和 compile 里调用、反向；排查不稳定开 <code>use_deterministic_algorithms(True)</code>。</p>
+<p>生命周期：发现 → 判断 → 写 → 注册 → 验 → 测 → 接 → 守（接进 CI）。</p>
+<p>口诀：测试矩阵别偷懒：不整除、不连续、边界值、compile 里也要跑。</p>
+</details>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

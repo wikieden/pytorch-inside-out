@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 27 章 · 显存：谁占了、怎么省、怎么看 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="27">第 27 章 · 显存：谁占了、怎么省、怎么看</h1><p><a class="btn" href="../animations/27-memory-curve.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：训练时显存都被谁占了？激活为什么常常比参数还大？激活重计算（activation checkpointing）用多少算力换多少显存？OOM 了怎么看清是谁、按什么顺序去省？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/26-mixed-precision.html">第 26 章 混合精度</a> · 下一章：<a href="../lessons/28-compile-graphs.html">第 28 章 compile 与 CUDA Graphs</a><br />
+对应原文：Ultra-Scale Playbook §Memory usage in Transformers（<code>ultrascale-playbook.md</code> 第 208 行起：Profiling the memory usage 第 242 行、Weights/grads/optimizer 第 270 行、Activations memory 第 350 行、Activation recomputation 第 387 行、Gradient accumulation 第 466 行）；AISPE ch13「PyTorch 内存分析和调优」（<code>ch13.md</code> 第 1377–1545 行）；多机报告 §6 显存优化清单；本章激活字节数是本机 torch 2.15.0 用 <code>saved_tensors_hooks</code> 实测</p>
+<p>本章缩写：OOM = Out Of Memory；AC = Activation Checkpointing（激活 / 检查点，也叫重计算 recomputation）；b = micro-batch 大小，s = 序列长度，h = 隐藏维度，L = 层数；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="2026-11-14">第一步：显存的四块（2026-11-14）</h3>
+<table>
+<thead>
+<tr>
+<th>块</th>
+<th>大小</th>
+<th>随什么变</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>参数 + 梯度 + 优化器状态</td>
+<td>混合精度 AdamW 约 16Ψ 字节（第 19 章）</td>
+<td>只随模型大小</td>
+</tr>
+<tr>
+<td><strong>激活</strong>（为反向存下来的中间结果）</td>
+<td>随 b × s × h × L 增长</td>
+<td>batch、序列长度、层数</td>
+</tr>
+<tr>
+<td>临时缓冲</td>
+<td>算子运行时的工作空间、通信缓冲</td>
+<td>实现细节</td>
+</tr>
+<tr>
+<td>碎片</td>
+<td>缓存分配器里用不上的零碎空块（第 5 章）</td>
+<td>分配模式</td>
+</tr>
+</tbody>
+</table>
+<p><strong>为什么激活会很大</strong>：第 4 章说过，前向时记账员要把反向需要的张量<strong>存下来</strong>。每一层、每个 token、每个隐藏维度都要存几份。Playbook 第 350 行起给了 Transformer 每层激活的估算，大约是</p>
+<div class="arithmatex">\[\text{每层激活字节} \approx s \cdot b \cdot h \cdot \left(34 + \frac{5 a s}{h}\right)\]</div>
+<p>（a 是头数；括号第二项来自 attention 的 s × s 分数表，用 FlashAttention 就几乎没了，第 14 章。）</p>
+<p><strong>数字演示</strong>：7B 模型（h = 4096，L = 32），b = 1、s = 4096，只看第一项：<span class="arithmatex">\(4096 \times 1 \times 4096 \times 34 ≈ 570\)</span> MB 每层，32 层约 <strong>18 GB</strong>——而 7B 的 bf16 参数才 14 GB。序列翻倍，激活翻倍。</p>
+<p><strong>一句话</strong>：显存 = 模型状态（16Ψ）+ 激活（随 b·s·h·L）+ 临时 + 碎片；长序列时激活常常比参数还大。</p>
+<h3 id="2026-11-14_1">第二步：激活重计算——用算力换显存（2026-11-14）</h3>
+<p><strong>类比：考试抄笔记。</strong> 原来每道题的草稿都留着（存激活），桌子堆满了。现在只留每一大题的题目（每块的输入），要用到某道题的草稿时，<strong>照着题目再算一遍</strong>。</p>
+<pre><code class="language-python">from torch.utils.checkpoint import checkpoint
+for block in blocks:
+    h = checkpoint(block, h, use_reentrant=False)    # 前向只存 block 的输入；反向时重跑 block 的前向
+</code></pre>
+<p><strong>实测</strong>（8 个 MLP 块：Linear(1024 → 4096) → GELU → Linear(4096 → 1024)，batch 32，float32；用 <code>torch.autograd.graph.saved_tensors_hooks</code> 统计为反向存下的字节数，不算参数本身）：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>存下的激活</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>不重计算</td>
+<td><strong>9.125 MB</strong>：每块 1.125 MB（输入 0.125 + 第一层输出 0.5 + GELU 输出 0.5）× 8，加 loss 的 0.125</td>
+</tr>
+<tr>
+<td>每块 checkpoint</td>
+<td><strong>1.125 MB</strong>：每块只存输入 0.125 MB × 8，加 0.125</td>
+</tr>
+</tbody>
+</table>
+<p>省了 8 倍。代价：反向时每块要<strong>再跑一次前向</strong>，大约多 1 / 3 的计算（前向 2N、反向 4N，再加一次前向 2N，第 23 章）。</p>
+<p><strong>选择性重计算</strong>（Playbook 第 387 行起）：不必整块重算。attention 的 softmax 输出这类"大但便宜"的激活才重算，矩阵乘的输出（贵）照样存。FlashAttention 本身就在反向里重算分数表，所以已经是一种选择性重计算。PyTorch 2.4+ 也有自动选择的 API（<code>torch.utils.checkpoint</code> 的 selective / <code>create_selective_checkpoint_contexts</code>）。</p>
+<p><strong>一句话</strong>：checkpoint 只存每块的输入、反向时重算，实测 8 块 MLP 激活 9.1 MB → 1.1 MB；多约 1/3 计算；选择性重算只重算便宜的。</p>
+<h3 id="memory-snapshot2026-11-14">第三步：看清是谁——memory snapshot（2026-11-14）</h3>
+<p>OOM 时别猜，录一份<strong>显存快照</strong>：</p>
+<pre><code class="language-python">torch.cuda.memory._record_memory_history(max_entries=100_000)   # 开始记录每次分配和释放（带调用栈）
+for _ in range(3): train_step()
+torch.cuda.memory._dump_snapshot(&quot;snap.pickle&quot;)
+torch.cuda.memory._record_memory_history(enabled=None)          # 停止
+</code></pre>
+<p>把 <code>snap.pickle</code> 拖进 <strong>pytorch.org/memory_viz</strong>，看到一张"显存随时间变化"的堆叠图，每一块颜色是一次分配，点它能看到是哪行代码分配的。</p>
+<p><strong>典型形状</strong>：前向时显存一路<strong>上升</strong>（激活越存越多），在前向结束、反向开始处达到<strong>峰值</strong>，反向时一路<strong>下降</strong>（激活用完就释放），优化器 step 时再有一个小台阶（AdamW 的临时张量）。</p>
+<p>AISPE ch13 第 1377–1545 行有完整的分析示例；快速看数字用 <code>torch.cuda.max_memory_allocated()</code> 和 <code>torch.cuda.memory_summary()</code>。</p>
+<p><strong>一句话</strong>：<code>_record_memory_history</code> + <code>_dump_snapshot</code> + memory_viz 看是哪行代码占的；正常形状是前向涨、反向落。</p>
+<h3 id="oom-2026-11-14">第四步：OOM 了按什么顺序省（2026-11-14）</h3>
+<p>按"投入产出比"排（多机报告 §6）：</p>
+<table>
+<thead>
+<tr>
+<th>顺序</th>
+<th>手段</th>
+<th>省的是</th>
+<th>代价</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>bf16 混合精度（第 26 章）</td>
+<td>激活减半</td>
+<td>几乎没有</td>
+</tr>
+<tr>
+<td>2</td>
+<td>FlashAttention / SDPA（第 14 章）</td>
+<td>s × s 分数表</td>
+<td>几乎没有</td>
+</tr>
+<tr>
+<td>3</td>
+<td>减小 micro-batch + 梯度累积（第 9、18 章）</td>
+<td>激活</td>
+<td>小 batch 时 GPU 吃不饱</td>
+</tr>
+<tr>
+<td>4</td>
+<td>选择性 / 全量激活重计算</td>
+<td>激活</td>
+<td>多 0 ~ 1/3 计算</td>
+</tr>
+<tr>
+<td>5</td>
+<td>FSDP / ZeRO（第 19 章）</td>
+<td>参数、梯度、优化器状态</td>
+<td>通信</td>
+</tr>
+<tr>
+<td>6</td>
+<td>融合 cross-entropy（不写出 b × s × V 的 logits）</td>
+<td>输出层激活（V 很大时巨大）</td>
+<td>要用专门 kernel（Liger-Kernel 等，第 29 章）</td>
+</tr>
+<tr>
+<td>7</td>
+<td>CPU offload（<code>OffloadPolicy</code>）</td>
+<td>优化器状态挪到 CPU</td>
+<td>很慢，最后手段</td>
+</tr>
+<tr>
+<td>另</td>
+<td><code>PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True</code></td>
+<td>碎片</td>
+<td>几乎没有</td>
+</tr>
+</tbody>
+</table>
+<p><strong>一句话</strong>：先 bf16 和 Flash，再减 batch 加累积，再重计算，再 FSDP；logits 太大用融合 CE；offload 最后。</p>
+<h3 id="_2">动画演示：一步训练的显存曲线</h3>
+<p><img alt="显存曲线" src="../animations/27-memory-curve.gif" /></p>
+<p>可交互版：<a href="../animations/27-memory-curve.html">animations/27-memory-curve.html</a>。开关：<strong>激活重计算 开 / 关</strong>；滑块调层数。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>底部灰色是模型状态（参数 + 梯度 + 优化器，固定）；</li>
+<li>前向时每过一层，激活（蓝）往上叠一块；峰值在前向结束处；</li>
+<li>反向时每层的激活被用掉、释放，曲线回落；</li>
+<li>打开重计算：每层只叠一小块（输入），反向时临时叠一块"重算的激活"再释放；峰值明显变低，但反向变长。</li>
+</ol>
+<h2 id="_3">练习与作答记录</h2>
+<p><strong>题 1</strong>：同一个模型，序列长度从 2048 改成 8192（不用 FlashAttention 之前的那一项先不管），每层激活大约变成几倍？参数显存变吗？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：一个 24 层模型，每层激活 600 MB，每层输入 50 MB。全量重计算后存下的激活大约多少？反向时多花多少计算（相对前向 + 反向的总量）？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：OOM 了，已经开了 bf16 和 SDPA。接下来你会按什么顺序尝试？每一步省的是哪一块显存？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_4">口诀</h2>
+<blockquote>
+<p>显存四块：模型状态十六 Ψ、激活随 b s h L、临时和碎片；长序列激活比参数大；<br />
+重计算只存每块输入，反向再跑一遍前向，多三分之一算力；<br />
+OOM 先录快照看是谁；bf16、Flash、减 batch、重计算、FSDP，offload 最后。</p>
+</blockquote>
+<h2 id="_5">本章复习卡片</h2>
+<ul>
+<li>P95（显存四块；每层激活 ≈ s·b·h·(34 + 5as/h)；7B、s = 4096 约 18 GB 激活）</li>
+<li>P96（checkpoint 只存块输入；实测 9.125 MB → 1.125 MB；多约 1/3 计算；选择性重计算）</li>
+<li>P97（memory snapshot 三行 + memory_viz；前向涨、反向落的曲线）</li>
+<li>P98（OOM 处理顺序表）</li>
+</ul>
+<h2 id="_6">附录 · 延伸阅读</h2>
+<h3 id="_7">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ Ultra-Scale Playbook §Memory usage in Transformers</td>
+<td><code>ultrascale-playbook.md</code> 第 208–559 行</td>
+<td>激活公式、重计算、梯度累积，配显存曲线图</td>
+</tr>
+<tr>
+<td>★ AISPE 第 13 章</td>
+<td><code>ch13.md</code> 第 1377–1545 行</td>
+<td>memory snapshot 实战</td>
+</tr>
+<tr>
+<td>官方文档「Understanding CUDA Memory Usage」</td>
+<td>全文（〔在线〕docs.pytorch.org/docs/stable/torch_cuda_memory.html）</td>
+<td><code>_record_memory_history</code> 的所有参数</td>
+</tr>
+<tr>
+<td>Korthikanti et al. 2022「Reducing Activation Recomputation in Large Transformer Models」</td>
+<td>§3 激活公式、§5 选择性重计算（〔在线〕arXiv:2205.05198）</td>
+<td>34 + 5as/h 的出处</td>
+</tr>
+<tr>
+<td>Chen et al. 2016「Training Deep Nets with Sublinear Memory Cost」</td>
+<td>§3（〔在线〕arXiv:1604.06174）</td>
+<td>激活重计算的原始论文</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">数学原理</h3>
+<ul>
+<li><strong>重计算的算力代价</strong>：前向 <span class="arithmatex">\(F\)</span>、反向 <span class="arithmatex">\(2F\)</span>；全量重计算多一次前向，总量 <span class="arithmatex">\(3F \to 4F\)</span>，多 <span class="arithmatex">\(1/3\)</span>。</li>
+<li><strong>√L 策略</strong>：每 <span class="arithmatex">\(\sqrt{L}\)</span> 层存一次，激活显存从 <span class="arithmatex">\(O(L)\)</span> 降到 <span class="arithmatex">\(O(\sqrt{L})\)</span>，代价仍是约一次额外前向（Chen 2016）。</li>
+</ul>
+<h3 id="_9">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>checkpoint(fn, *args, use_reentrant=False)</code></td>
+<td>激活重计算</td>
+</tr>
+<tr>
+<td><code>torch.autograd.graph.saved_tensors_hooks(pack, unpack)</code></td>
+<td>拦截为反向存下的张量（统计、压缩、offload）</td>
+</tr>
+<tr>
+<td><code>torch.cuda.memory._record_memory_history()</code> / <code>_dump_snapshot()</code></td>
+<td>显存快照</td>
+</tr>
+<tr>
+<td><code>max_memory_allocated()</code> / <code>memory_summary()</code> / <code>reset_peak_memory_stats()</code></td>
+<td>峰值 / 汇总</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(s b h (34 + 5as/h)\)</span></td>
+<td>每层激活字节估算</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_10">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch27_memory.py</code>，配套测试 <code>tests/test_ch23_28.py</code>；同一章的 notebook：<code>notebooks/ch27_memory.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch27_memory.py   # 一步一步打印  
+uv run pytest tests/test_ch23_28.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 激活估算</td>
+<td>s·b·h·34</td>
+<td><code>layer_activation_bytes(4096, 1, 4096)</code></td>
+<td>每层 570 MB，32 层 18.3 GB</td>
+</tr>
+<tr>
+<td>第二步 重计算</td>
+<td>只存块输入</td>
+<td><code>saved_activation_mb(False / True)</code></td>
+<td>9.125 MB → 1.125 MB</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">with torch.autograd.graph.saved_tensors_hooks(pack, unpack):
+    h = checkpoint(blk, h, use_reentrant=False)   # 只存输入，反向时重算
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong>统计时去掉了参数本身</strong>：Linear 的反向也要用权重，但权重本来就在显存里，不算激活。</li>
+<li><strong>重算时存下的张量 hook 看不到</strong>：它们在反向里临时出现、用完就丢，所以 checkpoint 只统计到输入。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li><code>saved_activation_mb(False, L=16)</code>，看是不是线性增长。</li>
+<li>只对偶数层用 checkpoint，看结果在两者之间。</li>
+</ul><nav class="pager"><a href="26-mixed-precision.html">← 第 26 章 · 混合精度：bf16、fp16、TF32、FP8 怎么选</a><a href="28-compile-graphs.html">第 28 章 · 训练里用 compile 与 CUDA Graphs：消灭碎活和启动开销 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

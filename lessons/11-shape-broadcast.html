@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 11 章 · 形状与广播：从右往左对齐，1 可以拉伸 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="11-1">第 11 章 · 形状与广播：从右往左对齐，1 可以拉伸</h1><p><a class="btn" href="../animations/11-broadcast.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：两个形状不一样的张量为什么能直接相加？什么时候会报 "size must match"？多头注意力里把 (B, T, D) 变成 (B, H, T, d) 的那几步变形，各自在干什么？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/10-save-load.html">第 10 章 保存与加载</a> · 下一章：<a href="../lessons/12-index-scatter.html">第 12 章 索引与散射</a><br />
+对应原文：00-overview.md §4.2；官方文档 Broadcasting semantics（〔在线〕docs.pytorch.org/docs/stable/notes/broadcasting.html）；einops 文档（〔在线〕einops.rocks）；Transformer 讲义 第 13 章 多头；本章输出在本机 torch 2.15.0 上跑过</p>
+<p>本章缩写：B = batch（批大小）；T = time / tokens（序列长度）；D = d_model（模型维度）；H = heads（头数）；d = 每个头的维度 = D / H；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="2026-11-14">第一步：广播规则——从右往左对齐（2026-11-14）</h3>
+<p><strong>类比：排队对号入座。</strong> 两队人从<strong>最右边</strong>开始一一对齐。每一对要么人数一样，要么有一边只有 1 个人（他可以"分身"陪对面所有人），要么有一边已经没人了（当成 1）。</p>
+<p>规则写成三条：</p>
+<ol>
+<li>两个形状<strong>从最后一维开始</strong>往前对齐；</li>
+<li>每一对维度：<strong>相等</strong>，或者<strong>其中一个是 1</strong>，或者<strong>其中一个不存在</strong>；</li>
+<li>结果的每一维取两者中大的那个。</li>
+</ol>
+<p><strong>数字演示</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>a 的形状</th>
+<th>b 的形状</th>
+<th>从右对齐</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(2, 3, 4)</td>
+<td>(4,)</td>
+<td>4 对 4 ✓；3 对"无" ✓；2 对"无" ✓</td>
+<td>(2, 3, 4)</td>
+</tr>
+<tr>
+<td>(2, 3, 4)</td>
+<td>(3, 1)</td>
+<td>4 对 1 ✓；3 对 3 ✓；2 对"无" ✓</td>
+<td>(2, 3, 4)</td>
+</tr>
+<tr>
+<td>(2, 3, 4)</td>
+<td>(3,)</td>
+<td>4 对 3 ✗</td>
+<td>报错</td>
+</tr>
+<tr>
+<td>(3, 1)</td>
+<td>(2,)</td>
+<td>1 对 2 ✓；3 对"无" ✓</td>
+<td>(3, 2)</td>
+</tr>
+</tbody>
+</table>
+<p>最后一行实测：</p>
+<pre><code class="language-python">torch.tensor([[1.], [2.], [3.]]) + torch.tensor([10., 20.])
+# tensor([[11., 21.],
+#         [12., 22.],
+#         [13., 23.]])
+</code></pre>
+<p>列向量 (3, 1) 往右"拉伸"成 2 列；行向量 (2,) 往下拉伸成 3 行，再逐个相加，得到 3 × 2 的"加法表"。</p>
+<p>报错长这样：<code>The size of tensor a (4) must match the size of tensor b (3) at non-singleton dimension 2</code>——"第 2 维上 4 和 3 对不上，而且都不是 1"。</p>
+<p><strong>广播不复制数据</strong>：拉伸靠的是第 2 章的 stride = 0。</p>
+<p><strong>一句话</strong>：从右往左对齐，每对相等或有一个是 1 或不存在；1 会被拉伸，靠 stride 0 不复制。</p>
+<h3 id="2026-11-14_1">第二步：最常见的坑——偏偏对上了，但对错了维（2026-11-14）</h3>
+<p>广播报错不可怕，可怕的是<strong>不报错但算错</strong>。</p>
+<p>例：每个样本（行）减去自己的均值。<code>x</code> 形状 (B, D)：</p>
+<pre><code class="language-python">x - x.mean(dim=1)                 # mean 是 (B,)，从右对齐会去对 D 那一维！
+x - x.mean(dim=1, keepdim=True)   # mean 是 (B, 1)，对的
+</code></pre>
+<p>第一行在 B ≠ D 时会报错还好；如果恰好 B = D（比如都是 64），<strong>不报错，结果是错的</strong>：每一列减的是"某一行"的均值。</p>
+<p><strong>防法</strong>：</p>
+<ul>
+<li>规约时用 <code>keepdim=True</code>，维度位置不变；</li>
+<li>写注释或用 jaxtyping 标形状（仓库约定 <code>Float[Tensor, "batch d_model"]</code>）；</li>
+<li>测试时故意用互不相同的维度大小（B = 3、D = 5），让错误的广播当场报错。</li>
+</ul>
+<p><strong>一句话</strong>：广播最怕"恰好对上"；规约用 keepdim，测试用互不相等的维度。</p>
+<h3 id="2026-11-14_2">第三步：变形四件套（2026-11-14）</h3>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>做什么</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>view</code> / <code>reshape</code></td>
+<td>改形状，元素总数不变，按行优先顺序重新切</td>
+<td>(2, 6) → (2, 2, 3)</td>
+</tr>
+<tr>
+<td><code>transpose(a, b)</code> / <code>permute(...)</code></td>
+<td>换维度的顺序</td>
+<td>(B, T, H, d) → (B, H, T, d)</td>
+</tr>
+<tr>
+<td><code>unsqueeze(i)</code> / <code>squeeze(i)</code></td>
+<td>插入 / 去掉一个长度 1 的维</td>
+<td>(D,) → (1, D)，为了广播</td>
+</tr>
+<tr>
+<td><code>expand</code> / <code>repeat</code></td>
+<td>广播式假复制 / 真复制（第 2 章）</td>
+<td>(1, D) → (B, D)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>数字演示：多头注意力的拆头</strong>（Transformer 第 13 章）。<code>q</code> 形状 (B=2, T=5, D=8)，拆成 H=2 个头，每头 d=4：</p>
+<pre><code class="language-python">q.view(2, 5, 2, 4)           # (B, T, H, d)：把最后的 8 切成 2 段 × 4
+ .transpose(1, 2)            # (B, H, T, d)：把&quot;头&quot;挪到前面，每个头单独做 attention
+# torch.Size([2, 2, 5, 4])
+</code></pre>
+<p>为什么先 view 再 transpose，不能直接 <code>view(2, 2, 5, 4)</code>？因为内存里 8 个数是"同一个 token 的 8 个维度"挨着放的，直接 view 会把<strong>不同 token</strong> 的数切到一个头里。先在最后一维上切（不跨 token），再换维度顺序才对。</p>
+<p>transpose 之后不连续（第 2 章），stride 是 (40, 4, 8, 1)。之后如果要 <code>view</code> 回 (B, T, D)，得先 <code>.transpose(1, 2).contiguous()</code> 或用 <code>reshape</code>。</p>
+<p><strong>一句话</strong>：view 只能在相邻维度间切分合并，换顺序用 transpose / permute；拆头要先切最后一维再换位置。</p>
+<h3 id="einops">第四步：einops——把形状写成字</h3>
+<p>上面两步用 einops（Einstein-inspired notation for operations：爱因斯坦式记号的张量操作库）写成一行，形状一目了然：</p>
+<pre><code class="language-python">from einops import rearrange
+rearrange(q, &quot;b t (h d) -&gt; b h t d&quot;, h=2)       # 拆头，结果同上
+rearrange(o, &quot;b h t d -&gt; b t (h d)&quot;)            # 合头
+</code></pre>
+<p>括号 <code>(h d)</code> 表示"这一维是 h 和 d 合在一起的"；箭头两边字母一样多，没写错就不会出错。仓库约定张量运算优先用 einops。<code>einops.repeat</code> / <code>reduce</code> 对应广播复制和规约。</p>
+<p><strong>一句话</strong>：einops 把变形写成"字母 → 字母"，括号表示合并，读代码就是读形状。</p>
+<h3 id="_2">动画演示：广播对齐</h3>
+<p><img alt="广播规则" src="../animations/11-broadcast.gif" /></p>
+<p>可交互版：<a href="../animations/11-broadcast.html">animations/11-broadcast.html</a>。下拉选四组形状。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>两个形状右对齐排成两行，从最右一对开始逐对检查，打 ✓ 或 ✗；</li>
+<li>是 1 的那一维画出"拉伸"箭头；</li>
+<li>最后一组 (3, 1) + (2,) 展开成格子，看 3 × 2 的加法表怎么来的。</li>
+</ol>
+<h2 id="_3">练习与作答记录</h2>
+<p><strong>题 1</strong>：下面能广播吗？能的话结果形状是什么？(a) (5, 1, 4) + (3, 4)；(b) (8, 3) + (8,)；(c) (2, 1) + (1, 7)。</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：<code>x</code> 形状 (64, 64)，同事写 <code>x - x.max(dim=1).values</code> 想让每行减去自己那行的最大值。会报错吗？结果对吗？怎么改？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：<code>k</code> 形状 (B=4, T=10, D=12)，拆成 H=3 个头。写出拆头的 view 和 transpose（或一行 einops），结果形状是什么？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_4">口诀</h2>
+<blockquote>
+<p>广播从右往左对，相等或者有一个 1；1 会拉伸不复制；<br />
+恰好对上最危险，规约记得 keepdim；<br />
+拆头先切最后维，再用 transpose 换位置；einops 读代码就是读形状。</p>
+</blockquote>
+<h2 id="_5">本章复习卡片</h2>
+<ul>
+<li>P34（广播三条规则；(3, 1) + (2,) → (3, 2) 加法表；报错信息怎么读）</li>
+<li>P35（广播陷阱：B = D 时 <code>x - x.mean(1)</code> 不报错但错；keepdim=True）</li>
+<li>P36（拆头：view(B, T, H, d).transpose(1, 2)；为什么不能直接 view 成 (B, H, T, d)；einops 写法）</li>
+</ul>
+<h2 id="_6">附录 · 延伸阅读</h2>
+<h3 id="_7">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ 官方文档 Broadcasting semantics</td>
+<td>全文（〔在线〕）</td>
+<td>规则原文和 in-place 广播的限制</td>
+</tr>
+<tr>
+<td>★ Tensor-Puzzles</td>
+<td>全部 21 题（〔在线〕github.com/srush/Tensor-Puzzles）</td>
+<td>只用广播写 <code>outer</code>、<code>diag</code>、<code>cumsum</code> 等，最好的广播练习</td>
+</tr>
+<tr>
+<td>einops 教程</td>
+<td>Part 1（〔在线〕einops.rocks）</td>
+<td>rearrange / reduce / repeat</td>
+</tr>
+<tr>
+<td>Transformer 讲义</td>
+<td>第 13 章 多头</td>
+<td>拆头的数学含义</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">数学原理</h3>
+<ul>
+<li><strong>广播的形式化</strong>：形状右对齐后，结果第 <span class="arithmatex">\(k\)</span> 维 <span class="arithmatex">\(= \max(a_k, b_k)\)</span>，要求 <span class="arithmatex">\(a_k = b_k\)</span> 或 <span class="arithmatex">\(\min(a_k, b_k) = 1\)</span>。</li>
+<li><strong>外积</strong>：列向量 (n, 1) + 行向量 (m,) 广播成 (n, m)，即 <span class="arithmatex">\(C_{ij} = a_i + b_j\)</span>；把 + 换成 × 就是外积 <span class="arithmatex">\(a b^\top\)</span>。</li>
+</ul>
+<h3 id="_9">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>x.sum(dim, keepdim=True)</code></td>
+<td>规约后保留维度，方便广播回去</td>
+</tr>
+<tr>
+<td><code>x.view(B, T, H, d).transpose(1, 2)</code></td>
+<td>拆头</td>
+</tr>
+<tr>
+<td><code>rearrange(x, "b t (h d) -&gt; b h t d", h=H)</code></td>
+<td>einops 拆头</td>
+</tr>
+<tr>
+<td><code>x.unsqueeze(-1)</code> / <code>x[..., None]</code></td>
+<td>加一维</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_10">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch11_shape_broadcast.py</code>，配套测试 <code>tests/test_ch07_15.py</code>；同一章的 notebook：<code>notebooks/ch11_shape_broadcast.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch11_shape_broadcast.py   # 一步一步打印  
+uv run pytest tests/test_ch07_15.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 广播规则</td>
+<td>从右对齐</td>
+<td><code>broadcast_shape(a, b)</code></td>
+<td>四组：三组成功、(2,3,4)+(3,) 报错</td>
+</tr>
+<tr>
+<td>第一步 加法表</td>
+<td>(3, 1) + (2,)</td>
+<td><code>addition_table()</code></td>
+<td>[[11, 21], [12, 22], [13, 23]]</td>
+</tr>
+<tr>
+<td>第二步 陷阱</td>
+<td>B = D 时不报错</td>
+<td><code>keepdim_trap()</code></td>
+<td>(False, True)</td>
+</tr>
+<tr>
+<td>第三、四步 拆头</td>
+<td>view + transpose</td>
+<td><code>split_heads()</code></td>
+<td>(2, 2, 5, 4)、stride (40, 4, 8, 1)、与 einops 一致</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">x - x.mean(dim=1, keepdim=True)           # 每行减自己的均值
+q.view(B, T, H, D // H).transpose(1, 2)
+rearrange(q, &quot;b t (h d) -&gt; b h t d&quot;, h=H)
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong>错误的广播在方阵上不报错</strong>：<code>keepdim_trap</code> 故意用 3 × 3，错的结果照样算出来。</li>
+<li><strong>拆头后 stride 是 (40, 4, 8, 1)</strong>：第 1、2 维的 stride 不递减，就是不连续。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li><code>broadcast_shape((5, 1, 4), (1, 3, 1))</code>，先猜再跑。</li>
+<li>把 <code>keepdim_trap(4)</code> 改成非方阵（比如 3 × 4），看会不会报错。</li>
+</ul><nav class="pager"><a href="10-save-load.html">← 第 10 章 · 保存与加载：存清单、不存对象，断点要存全</a><a href="12-index-scatter.html">第 12 章 · 索引与散射：按掩码挑、按下标取、按下标写回 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

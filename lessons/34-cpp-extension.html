@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 34 章 · C++ / CUDA 扩展：TORCH_LIBRARY 把 C++ 函数登记进分派表 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="34-c-cuda-torch_library-c">第 34 章 · C++ / CUDA 扩展：TORCH_LIBRARY 把 C++ 函数登记进分派表</h1><p><a class="btn" href="../animations/34-torch-library.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：什么时候需要写 C++ / CUDA 扩展而不是 Triton？<code>TORCH_LIBRARY</code> 和 <code>TORCH_LIBRARY_IMPL</code> 各做什么？<code>load_inline</code> 和 <code>setup.py</code> 两种构建方式怎么选？为什么手写的 C++ 不一定比 PyTorch 自带的快？<br />
+讲解日期：2026-11-15 · 上一章：<a href="../lessons/33-custom-op.html">第 33 章 注册自定义算子</a> · 下一章：<a href="../lessons/35-quant-export.html">第 35 章 量化与导出</a><br />
+对应原文：官方教程「Custom C++ and CUDA Operators」与 <code>torch.utils.cpp_extension</code> 文档（〔在线〕docs.pytorch.org/tutorials/advanced/cpp_custom_ops.html）；本讲义 <a href="../lessons/03-dispatcher.html">第 3 章 分派器</a>；CUDA 讲义 第 25 章 编译部署；本章编译和计时是本机 Mac（clang + ninja）torch 2.15.0 实测</p>
+<p>本章缩写：ATen = A Tensor library（PyTorch 的 C++ 张量库，<code>at::</code> 命名空间）；ABI = Application Binary Interface（应用 / 二进制 / 接口）；JIT = Just-In-Time（即时编译）；<code>-O3</code> = 编译器最高一档常规优化；CUTLASS = CUDA Templates for Linear Algebra Subroutines（NVIDIA 的线性代数模板库）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="c-cuda2026-11-15">第一步：什么时候用 C++ / CUDA（2026-11-15）</h3>
+<table>
+<thead>
+<tr>
+<th>路线</th>
+<th>适合</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>torch.compile</code> 自动融合（第 31 章）</td>
+<td>逐元素、规约的融合；先试它</td>
+</tr>
+<tr>
+<td>Triton（第 32–33 章）</td>
+<td>大多数自定义融合 kernel；Python 写、开发快</td>
+</tr>
+<tr>
+<td><strong>C++ / CUDA 扩展</strong>（本章）</td>
+<td>要用 CUTLASS / CuTe、PTX 内联汇编、warp 级精细控制；要包装现成的 C++ / CUDA 库；CPU 上的特殊实现；部署时不想依赖 Python</td>
+</tr>
+</tbody>
+</table>
+<p>FlashAttention、DeepGEMM、vLLM 的很多 kernel 都是 CUDA C++ 写、用本章的方式接进 PyTorch 的。</p>
+<p><strong>一句话</strong>：先 compile，再 Triton；要 CUTLASS、PTX、包装 C++ 库或脱离 Python 时才写 C++ / CUDA 扩展。</p>
+<h3 id="c2026-11-15">第二步：三段 C++——实现、声明、登记（2026-11-15）</h3>
+<pre><code class="language-cpp">#include &lt;torch/extension.h&gt;
+
+// ① 实现：普通 C++ 函数，参数和返回都是 at::Tensor
+at::Tensor add_relu_cpu(const at::Tensor&amp; x, const at::Tensor&amp; y) {
+  TORCH_CHECK(x.sizes() == y.sizes(), &quot;shape mismatch&quot;);     // 检查不过就抛 Python 异常
+  auto xc = x.contiguous(), yc = y.contiguous();             // 第 2 章：保证内存连续
+  auto out = torch::empty_like(xc);
+  const float* a = xc.data_ptr&lt;float&gt;(); const float* b = yc.data_ptr&lt;float&gt;();
+  float* o = out.data_ptr&lt;float&gt;();
+  at::parallel_for(0, xc.numel(), 1 &lt;&lt; 16, [&amp;](int64_t s, int64_t e) {   // 多线程分块
+    for (int64_t i = s; i &lt; e; ++i) { float v = a[i] + b[i]; o[i] = v &gt; 0 ? v : 0; }
+  });
+  return out;
+}
+
+// ② 声明：在 myext 命名空间里声明算子的签名（schema）
+TORCH_LIBRARY(myext, m) {
+  m.def(&quot;add_relu(Tensor x, Tensor y) -&gt; Tensor&quot;);
+}
+
+// ③ 登记：CPU 这一列填 add_relu_cpu
+TORCH_LIBRARY_IMPL(myext, CPU, m) {
+  m.impl(&quot;add_relu&quot;, &amp;add_relu_cpu);
+}
+</code></pre>
+<p>对照第 3 章那张"算子 × 标签"的大表：<code>TORCH_LIBRARY</code> 加了<strong>一行</strong>（新算子 <code>myext::add_relu</code>），<code>TORCH_LIBRARY_IMPL(myext, CPU, …)</code> 在 <strong>CPU 那一列</strong>填了函数。有 CUDA 实现就再写一个 <code>TORCH_LIBRARY_IMPL(myext, CUDA, m)</code>；反向可以在 C++ 里登记到 <code>Autograd</code> 那一列，也可以像第 33 章一样在 Python 里用 <code>register_autograd</code>。</p>
+<p><code>register_fake</code> 一般在 Python 里补：</p>
+<pre><code class="language-python">@torch.library.register_fake(&quot;myext::add_relu&quot;)
+def _(x, y): return torch.empty_like(x)
+</code></pre>
+<p><strong>实测</strong>：编译后 <code>torch.ops.myext.add_relu([−2, 1, 3], [1, −3, 1])</code> 得到 <code>[0, 0, 4]</code>；<code>opcheck</code> 四项全是 SUCCESS。</p>
+<p><strong>一句话</strong>：C++ 实现 + <code>TORCH_LIBRARY</code> 声明签名（加一行）+ <code>TORCH_LIBRARY_IMPL</code> 按设备登记（填一列）；fake 和反向可以在 Python 里补。</p>
+<h3 id="2026-11-15">第三步：两种构建方式（2026-11-15）</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>load_inline</code> / <code>load</code>（即时编译）</th>
+<th><code>setup.py</code> + <code>CppExtension</code> / <code>CUDAExtension</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>怎么用</td>
+<td>Python 里传源码字符串（或文件路径），第一次调用时编译</td>
+<td><code>pip install .</code> 预先编译成 <code>.so</code></td>
+</tr>
+<tr>
+<td>适合</td>
+<td>实验、学习、小 kernel</td>
+<td>发布、CI、正式项目</td>
+</tr>
+<tr>
+<td>本机实测</td>
+<td>首次编译 7.4 秒（之后命中缓存）</td>
+<td>—</td>
+</tr>
+<tr>
+<td>依赖</td>
+<td>需要 ninja（<code>pip install ninja</code>）和 C++ 编译器；CUDA 版还要 nvcc</td>
+<td>同左</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-python">from torch.utils.cpp_extension import load_inline
+load_inline(name=&quot;myext&quot;, cpp_sources=src, is_python_module=False, extra_cflags=[&quot;-O3&quot;])
+</code></pre>
+<p><code>is_python_module=False</code>：只加载 <code>.so</code>，靠 <code>TORCH_LIBRARY</code> 注册的算子从 <code>torch.ops.myext</code> 访问，不生成 Python 模块。新版 PyTorch 还支持只依赖稳定 ABI 构建，一个二进制适配多个 PyTorch 版本（<code>py_limited_api</code> 等，以当前文档为准）。</p>
+<p><strong>本机踩到的坑</strong>：<code>pip install ninja</code> 之后报 "Ninja is required"——因为 ninja 装在虚拟环境的 <code>bin/</code> 里，不在 PATH 上。把 <code>.venv/bin</code> 加进 PATH（或用 <code>uv run</code>）就好了。</p>
+<p><strong>一句话</strong>：学习用 load_inline（要 ninja + 编译器），正式发布用 setup.py；ninja 要在 PATH 上。</p>
+<h3 id="2026-11-15_1">第四步：手写不一定更快——实测（2026-11-15）</h3>
+<p>同样的 <code>relu(x + y)</code>，<span class="arithmatex">\(2^{24}\)</span> 个 float32，本机 6 线程：</p>
+<table>
+<thead>
+<tr>
+<th>版本</th>
+<th>每次</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>eager <code>torch.relu(a + b)</code>（两个 kernel）</td>
+<td>1.75 ms</td>
+</tr>
+<tr>
+<td>C++ 扩展，<code>-O0</code>（不优化）</td>
+<td><strong>107.4 ms</strong></td>
+</tr>
+<tr>
+<td>C++ 扩展，<code>-O3</code></td>
+<td>1.70 ms</td>
+</tr>
+<tr>
+<td><code>torch.compile</code></td>
+<td><strong>1.18 ms</strong></td>
+</tr>
+</tbody>
+</table>
+<p>三个教训：</p>
+<ol>
+<li><strong>编译选项是第一位的</strong>：同一份代码，不优化慢 63 倍。显式写 <code>extra_cflags=["-O3"]</code>（CUDA 用 <code>extra_cuda_cflags</code>），别依赖默认值；</li>
+<li><strong>"融合了"不等于"快"</strong>：手写版只读写一趟，理论上该比 eager 的两趟快，实际只持平——eager 的每个 kernel 都有 PyTorch 精心做的向量化和多线程；手写的标量循环要靠编译器自动向量化，分块大小也没调；</li>
+<li><strong>先测 compile 再决定</strong>：这里 compile 生成的代码比手写还快 30%。手写之前，先按第 29 章算出理论最快、按第 31 章看 compile 生成了什么。</li>
+</ol>
+<p><strong>一句话</strong>：编译选项先写对（-O3）；手写融合不自动赢，要和 eager、compile 三方实测；compile 常常已经够好。</p>
+<h3 id="c">动画演示：一个 C++ 算子怎么接进分派表</h3>
+<p><img alt="C++ 扩展登记" src="../animations/34-torch-library.gif" /></p>
+<p>可交互版：<a href="../animations/34-torch-library.html">animations/34-torch-library.html</a>。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>上面是第 3 章的"算子 × 标签"大表（只画几行几列）；</li>
+<li><code>TORCH_LIBRARY</code> 执行时，表里多出一行 <code>myext::add_relu</code>，各列都空着；</li>
+<li><code>TORCH_LIBRARY_IMPL(myext, CPU)</code> 在 CPU 列填入函数；Python 的 <code>register_fake</code> 填 Meta / Fake 列；<code>register_autograd</code> 填 Autograd 列；</li>
+<li>最后一次调用 <code>torch.ops.myext.add_relu</code>，沿着这一行走第 3 章的标签梯子。</li>
+</ol>
+<h2 id="_2">练习与作答记录</h2>
+<p><strong>题 1</strong>：同一个算子有 CPU 和 CUDA 两个实现，C++ 里要写几个 <code>TORCH_LIBRARY</code> 和几个 <code>TORCH_LIBRARY_IMPL</code>？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：C++ 实现里为什么要先 <code>x.contiguous()</code> 再取 <code>data_ptr</code>？如果不这样做、传进来一个转置过的张量，会发生什么？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：同事手写了一个 C++ 融合 kernel，测得比 eager 慢 50 倍。你首先会检查什么？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_3">口诀</h2>
+<blockquote>
+<p>先 compile、再 Triton，要 CUTLASS、PTX、包装库才写 C++；<br />
+实现 + TORCH_LIBRARY 加一行 + TORCH_LIBRARY_IMPL 按设备填一列，fake 和反向 Python 里补；<br />
+load_inline 学习、setup.py 发布，ninja 要在 PATH；-O3 先写对，手写不自动赢，三方实测再定。</p>
+</blockquote>
+<h2 id="_4">本章复习卡片</h2>
+<ul>
+<li>P124（什么时候用 C++ / CUDA 扩展：CUTLASS、PTX、包装库、脱离 Python）</li>
+<li>P125（三段：实现 / <code>TORCH_LIBRARY</code> 声明 schema / <code>TORCH_LIBRARY_IMPL(ns, CPU|CUDA)</code> 登记；对应分派表的行和列）</li>
+<li>P126（load_inline vs setup.py；ninja 不在 PATH 的坑；首次编译 7.4 s）</li>
+<li>P127（实测 relu(x+y)：eager 1.75、-O0 107.4、-O3 1.70、compile 1.18 ms 的三个教训）</li>
+</ul>
+<h2 id="_5">附录 · 延伸阅读</h2>
+<h3 id="_6">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ 官方教程「Custom C++ and CUDA Operators」</td>
+<td>全文（〔在线〕）</td>
+<td>本章的完整版，含 CUDA 实现与 setup.py 模板</td>
+</tr>
+<tr>
+<td>★ 官方文档 <code>torch.utils.cpp_extension</code></td>
+<td><code>load_inline</code>、<code>CUDAExtension</code>、<code>BuildExtension</code>（〔在线〕）</td>
+<td>所有构建参数</td>
+</tr>
+<tr>
+<td>ezyang「Let's talk about the PyTorch dispatcher」</td>
+<td>registration 一节（〔在线〕）</td>
+<td>TORCH_LIBRARY 背后的登记机制</td>
+</tr>
+<tr>
+<td>CUDA 讲义 第 25 章 编译部署</td>
+<td>全章</td>
+<td>nvcc、架构参数、fatbin</td>
+</tr>
+<tr>
+<td>FlashAttention / DeepGEMM 仓库的 <code>setup.py</code></td>
+<td>〔在线〕</td>
+<td>真实大型 CUDA 扩展怎么组织</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_7">数学原理</h3>
+<p>本章没有新数学。性能判断沿用第 29 章：relu(x + y) 读 2 写 1 个张量，<span class="arithmatex">\(3 \times 64\)</span> MiB ÷ 1.70 ms ≈ 118 GB/s（本机 CPU 多线程下的有效带宽）。</p>
+<h3 id="_8">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TORCH_LIBRARY(ns, m) { m.def("op(Tensor x) -&gt; Tensor"); }</code></td>
+<td>声明算子</td>
+</tr>
+<tr>
+<td><code>TORCH_LIBRARY_IMPL(ns, CPU, m) { m.impl("op", &amp;fn); }</code></td>
+<td>按设备登记实现</td>
+</tr>
+<tr>
+<td><code>TORCH_CHECK(cond, msg)</code></td>
+<td>C++ 里的参数检查</td>
+</tr>
+<tr>
+<td><code>at::parallel_for(begin, end, grain, lambda)</code></td>
+<td>CPU 多线程分块</td>
+</tr>
+<tr>
+<td><code>load_inline(name, cpp_sources, cuda_sources, extra_cflags=["-O3"], is_python_module=False)</code></td>
+<td>即时编译</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch34_cpp_extension.py</code>，配套测试 <code>tests/test_ch29_36.py</code>；同一章的 notebook：<code>notebooks/ch34_cpp_extension.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑（第一次运行要编译几秒，需要 ninja 和 C++ 编译器）：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch34_cpp_extension.py   # 一步一步打印  
+uv run pytest tests/test_ch29_36.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第二步 三段 C++</td>
+<td>TORCH_LIBRARY + IMPL</td>
+<td><code>build("...", ["-O3"])</code></td>
+<td>[0, 0, 4]；opcheck 全部 SUCCESS</td>
+</tr>
+<tr>
+<td>第三步 编译</td>
+<td>load_inline</td>
+<td><code>build</code> 的返回值</td>
+<td>约 5–7 秒</td>
+</tr>
+<tr>
+<td>第四步 四方对比</td>
+<td>eager / -O0 / -O3 / compile</td>
+<td><code>per_call_ms(...)</code></td>
+<td>约 1.76 / 108 / 1.68 / 1.17 ms</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">TORCH_LIBRARY(NS, m) { m.def(&quot;add_relu(Tensor x, Tensor y) -&gt; Tensor&quot;); }
+TORCH_LIBRARY_IMPL(NS, CPU, m) { m.impl(&quot;add_relu&quot;, &amp;add_relu_cpu); }
+load_inline(name=ns, cpp_sources=SRC, is_python_module=False, extra_cflags=[&quot;-O3&quot;])
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong><code>build</code> 把 .venv/bin 加进 PATH</strong>：讲义第三步说的 ninja 找不到的坑，代码里直接绕过去了。</li>
+<li><strong>-O0 比 -O3 慢约 60 倍</strong>：测试只核对"慢 10 倍以上"。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把 <code>parallel_for</code> 的分块大小从 1 &lt;&lt; 16 改成 1 &lt;&lt; 10，看 -O3 版变快还是变慢。</li>
+<li>把 C++ 里的 <code>x.contiguous()</code> 去掉，传一个转置过的输入，看结果对不对。</li>
+</ul><nav class="pager"><a href="33-custom-op.html">← 第 33 章 · 注册自定义算子：让你的 kernel 成为 PyTorch 的&quot;一等公民&quot;</a><a href="35-quant-export.html">第 35 章 · 量化与导出：模型变小、脱离 Python 部署 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

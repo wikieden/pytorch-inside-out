@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PyTorch 从里到外 · 讲义目录 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="pytorch">PyTorch 从里到外 · 讲义目录</h1>
+<blockquote>
+<p>36 章 · 36 个动画（GIF + 可交互页面）· 135 张复习卡片 · 36 个代码模块和 notebook，数字都在本机 torch 2.15.0 上跑过 · 覆盖 study-plan 阶段 A–F 的全部讲义章节</p>
+</blockquote>
+<h2 id="_1">这本书讲什么</h2>
+<p>从"一行 <code>y = x @ w</code> 在 PyTorch 里经过了什么"讲起：Tensor 的内存布局、分派器、自动求导、GPU 的异步执行、<code>torch.compile</code> 的三道工序；然后是典型用法（Module、DataLoader、训练循环、存档）和常用算子；再到多机多卡（集合通信、DDP、FSDP2、DTensor 与张量并行、流水线 / 上下文 / 专家并行、分布式存档与排错）、训练性能调优（MFU、profiler、数据管道、混合精度、显存、CUDA Graph），最后是推理优化与融合算子开发（roofline、KV cache、读 Inductor 代码、Triton、注册自定义算子、C++ 扩展、量化与导出、benchmark 与正确性）。</p>
+<ul>
+<li><strong>适合谁</strong>：会写 Python、用过一点 PyTorch 的人。不需要事先懂 GPU 或分布式；要用到的数学只有求导的链式法则、指数和对数、矩阵乘法，都在用到的那一章现场讲。</li>
+<li><strong>读完能做什么</strong>：读懂 AISPE 第 13–14 章和 Ultra-Scale Playbook；做 CS336 a1 / a2（训练循环、DDP、FSDP、Triton FlashAttention）；拿到一个慢的训练脚本知道先量什么、改什么；写一个注册进 PyTorch、能被 <code>torch.compile</code> 用的融合算子。</li>
+<li><strong>怎么读</strong>：按章顺序读。每章先看讲解和动画，再自己做练习，最后用复习卡片隔几天考自己。总地图 00-overview.md 适合先扫一遍知道全貌。</li>
+</ul>
+<h2 id="_2">讲解的特点</h2>
+<ul>
+<li><strong>一次一小步</strong>：每个概念按"白话类比 → 公式（每个符号说清楚怎么读）→ 小数字亲手算一遍"讲。</li>
+<li><strong>每章一个动画</strong>：关键原理做成可交互页面，▶ 播放、→ 单步、↺ 从头开始，开关和滑块切换不同情形；GIF 版直接嵌在正文里。</li>
+<li><strong>数字都是实测的</strong>：讲义里的输出、计时、文件大小都在本机（Mac，torch 2.15.0，CPU / MPS，分布式用 2 个 Gloo 进程）上跑过；需要 NVIDIA GPU 的部分标 <code>[GPU]</code>。</li>
+<li><strong>对照原文</strong>：讲到 AISPE、Ultra-Scale Playbook、多机报告的地方标了本地文本的行号；在线官方文档标〔在线〕。</li>
+<li><strong>保留真实的学习过程</strong>：练习与作答记录里是学习时的原话、对错和点评（目前除第 1 章外都待作答）。</li>
+<li><strong>术语不设门槛</strong>：缩写第一次出现就给英文全称并逐词解释，全书缩写见 <a href="../lessons/appendix-glossary.html">缩写与术语表</a>。</li>
+<li><strong>每章都有代码对照</strong>：讲义末尾"代码对照"一节对应 <code>solutions/chapter-code/chNN_*.py</code>，配测试核对和讲义一致、配 notebook 一格一格跑；只算讲过的例子，不提前给练习答案。</li>
+<li><strong>每章收尾有口诀</strong>：全部口诀汇总在本页末尾。</li>
+</ul>
+<h2 id="_3">示例动画</h2>
+<table>
+<tr>
+<td width="33%"><img src="../animations/01-op-journey.gif" alt="PyTorch 做了什么：一行 `y = x @ w` 的旅程"><br><b>第 1 章</b> · PyTorch = GPU 上的 numpy + 自动记账；一行代码走四站<br><a href="../lessons/01-op-journey.html">讲义</a> · <a href="../animations/01-op-journey.html">▶ 交互</a></td>
+<td width="33%"><img src="../animations/02-tensor-stride.gif" alt="Tensor 内部：一块内存 + 一张"怎么读"的说明书"><br><b>第 2 章</b> · Tensor = 一排数 + 说明书（shape / stride / offset）；view 不复制<br><a href="../lessons/02-tensor-stride.html">讲义</a> · <a href="../animations/02-tensor-stride.html">▶ 交互</a></td>
+<td width="33%"><img src="../animations/06-compile-fusion.gif" alt="eager 与 graph：`torch.compile` 里面的三道工序"><br><b>第 6 章</b> · compile 三道工序：Dynamo 抄图 → AOTAutograd → Inductor 融合；断图与重编译<br><a href="../lessons/06-compile-stack.html">讲义</a> · <a href="../animations/06-compile-fusion.html">▶ 交互</a></td>
+</tr>
+<tr>
+<td width="33%"><img src="../animations/17-ring-allreduce.gif" alt="集合通信：五个动词和它们的代价"><br><b>第 17 章</b> · 五个集合通信动词；ring all-reduce 每卡发约 2K<br><a href="../lessons/17-collectives.html">讲义</a> · <a href="../animations/17-ring-allreduce.html">▶ 交互</a></td>
+<td width="33%"><img src="../animations/19-fsdp-lifecycle.gif" alt="FSDP2：每卡只存一片，用到时再拼"><br><b>第 19 章</b> · ZeRO 1/2/3 显存账；FSDP2 层前拼、用完丢<br><a href="../lessons/19-fsdp2.html">讲义</a> · <a href="../animations/19-fsdp-lifecycle.html">▶ 交互</a></td>
+<td width="33%"><img src="../animations/29-roofline.gif" alt="为什么融合能变快：算力受限与访存受限"><br><b>第 29 章</b> · roofline；访存受限只看字节；融合实测带宽不变时间减半<br><a href="../lessons/29-why-fusion.html">讲义</a> · <a href="../animations/29-roofline.html">▶ 交互</a></td>
+</tr>
+</table>
+
+<h2 id="_4">其他入口</h2>
+<ul>
+<li>复习卡片：<a href="../review.html">../review.md</a>（P01–P135，按六个阶段分类）</li>
+<li>总地图：../00-overview.md（一页讲完七个方面，适合查）</li>
+<li>学习计划与里程碑：../study-plan.md</li>
+<li>缩写与术语表：<a href="../lessons/appendix-glossary.html">appendix-glossary.md</a></li>
+<li>代码与 notebook：../../solutions/chapter-code/</li>
+<li>动画索引：<a href="../animations/index.html">../animations/README.md</a></li>
+</ul>
+<h2 id="_5">全流程总览</h2>
+<pre><code>你写的一行 Python                                  第 1 章
+  │ 前端 → 分派器（标签梯子）→ Autograd 记账 → kernel      第 3、4 章
+  │ Tensor = storage + stride（view 不复制）              第 2 章
+  │ GPU 上异步排队；同步点；显存仓库                       第 5 章
+  │ eager 一步一单 ↔ compile：Dynamo → AOTAutograd → Inductor   第 6 章
+  ▼
+一个训练脚本：Module → DataLoader → 五行循环 → 存档         第 7–10 章
+  │ 张量操作：广播、索引散射、规约 / 矩阵乘、F、loss / AdamW   第 11–15 章
+  ▼
+扩到多卡：进程 → 集合通信 → DDP → FSDP2 → TP → PP/CP/EP → DCP   第 16–22 章
+  ▼
+调快：算账（MFU）→ profiler → 数据 / 同步 → 精度 → 显存 → compile / CUDA Graph   第 23–28 章
+  ▼
+推理与融合：roofline → KV cache → 读生成代码 → Triton → 注册算子 → C++ → 量化导出 → 测准   第 29–36 章
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>做什么</th>
+<th>为什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A 核心机制（1–6）</td>
+<td>看清一行代码在 PyTorch 里发生了什么</td>
+<td>后面所有调优都建立在"它到底做了什么"上</td>
+</tr>
+<tr>
+<td>B 典型用法（7–10）</td>
+<td>写出一个完整、可续训的训练脚本</td>
+<td>这是每天在用的骨架</td>
+</tr>
+<tr>
+<td>C 常用算子（11–15）</td>
+<td>熟练操作形状、索引、规约、注意力和优化器</td>
+<td>写模型和写 kernel 都离不开</td>
+</tr>
+<tr>
+<td>D 分布式（16–22）</td>
+<td>把一个模型扩到多卡、多机</td>
+<td>大模型单卡放不下、训不完</td>
+</tr>
+<tr>
+<td>E 调优（23–28）</td>
+<td>量化瓶颈、按投入产出逐项优化</td>
+<td>同样的卡，MFU 从 20% 到 50% 就是 2.5 倍</td>
+</tr>
+<tr>
+<td>F 推理与融合（29–36）</td>
+<td>理解为什么融合快，能自己写、注册、测一个融合算子</td>
+<td>推理成本和定制算子的核心能力</td>
+</tr>
+</tbody>
+</table>
+<h2 id="_6">目录</h2>
+<table>
+<thead>
+<tr>
+<th>章</th>
+<th>主题</th>
+<th>一句话精要</th>
+<th>动画</th>
+<th>卡片</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A · 核心机制</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><a href="../lessons/01-op-journey.html">01</a></td>
+<td>PyTorch 做了什么：一行 <code>y = x @ w</code> 的旅程</td>
+<td>PyTorch = GPU 上的 numpy + 自动记账；一行代码走四站</td>
+<td><a href="../animations/01-op-journey.html">▶</a></td>
+<td>P01–P02</td>
+<td>已讲，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/02-tensor-stride.html">02</a></td>
+<td>Tensor 内部：一块内存 + 一张"怎么读"的说明书</td>
+<td>Tensor = 一排数 + 说明书（shape / stride / offset）；view 不复制</td>
+<td><a href="../animations/02-tensor-stride.html">▶</a></td>
+<td>P03–P05</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/03-dispatcher.html">03</a></td>
+<td>分派器：按标签一层层处理</td>
+<td>标签梯子：Autocast → Autograd → 后端；Meta 只算形状</td>
+<td><a href="../animations/03-dispatcher.html">▶</a></td>
+<td>P06–P08</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/04-autograd.html">04</a></td>
+<td>Autograd：账本怎么记、怎么倒着算</td>
+<td>前向记节点、反向倒着乘；<code>.grad</code> 只累加；自定义 Function</td>
+<td><a href="../animations/04-autograd.html">▶</a></td>
+<td>P09–P12</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/05-cuda-semantics.html">05</a></td>
+<td>GPU 语义：下单就走、何时会等、显存怎么借</td>
+<td>GPU 异步：挂单就走；同步点、stream、缓存分配器</td>
+<td><a href="../animations/05-async-queue.html">▶</a></td>
+<td>P13–P16</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/06-compile-stack.html">06</a></td>
+<td>eager 与 graph：<code>torch.compile</code> 里面的三道工序</td>
+<td>compile 三道工序：Dynamo 抄图 → AOTAutograd → Inductor 融合；断图与重编译</td>
+<td><a href="../animations/06-compile-fusion.html">▶</a></td>
+<td>P17–P20</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><strong>B · 典型用法</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><a href="../lessons/07-nn-module.html">07</a></td>
+<td><code>nn.Module</code>：一棵自动登记参数的积木树</td>
+<td>Module 自动登记参数；state_dict 是清单；train / eval 只切层的行为</td>
+<td><a href="../animations/07-module-tree.html">▶</a></td>
+<td>P21–P23</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/08-dataloader.html">08</a></td>
+<td>Dataset 与 DataLoader：给 GPU 备菜的流水线</td>
+<td>Dataset 回答第 i 个是什么，DataLoader 管分批、拼盘、并行备菜</td>
+<td><a href="../animations/08-dataloader-workers.html">▶</a></td>
+<td>P24–P26</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/09-training-loop.html">09</a></td>
+<td>训练循环：五行主干 + 三件护具</td>
+<td>五行主干 + autocast + 梯度裁剪 + warmup / cosine</td>
+<td><a href="../animations/09-training-step.html">▶</a></td>
+<td>P27–P30</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/10-save-load.html">10</a></td>
+<td>保存与加载：存清单、不存对象，断点要存全</td>
+<td>存 state_dict 不存对象；weights_only；续训存全套（AdamW 三倍大）</td>
+<td><a href="../animations/10-checkpoint.html">▶</a></td>
+<td>P31–P33</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><strong>C · 常用算子</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><a href="../lessons/11-shape-broadcast.html">11</a></td>
+<td>形状与广播：从右往左对齐，1 可以拉伸</td>
+<td>广播从右对齐；keepdim 防陷阱；拆头先 view 再 transpose</td>
+<td><a href="../animations/11-broadcast.html">▶</a></td>
+<td>P34–P36</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/12-index-scatter.html">12</a></td>
+<td>索引与散射：按掩码挑、按下标取、按下标写回</td>
+<td>mask 填 −∞；where 形状不变；gather 按号取，scatter_add 按号加回</td>
+<td><a href="../animations/12-gather-scatter.html">▶</a></td>
+<td>P37–P40</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/13-reduce-matmul.html">13</a></td>
+<td>规约、矩阵乘与数值稳定</td>
+<td>dim 是被压扁的维；einsum；logsumexp 防溢出；bf16 累加卡在 256</td>
+<td><a href="../animations/13-numerics.html">▶</a></td>
+<td>P41–P44</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/14-functional-attention.html">14</a></td>
+<td><code>nn.functional</code>：归一化、激活与注意力</td>
+<td>LayerNorm / RMSNorm、SwiGLU；SDPA 自动挑 Flash；FlexAttention</td>
+<td><a href="../animations/14-attention-memory.html">▶</a></td>
+<td>P45–P49</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/15-loss-optimizer.html">15</a></td>
+<td>损失与优化器：cross_entropy 的细节和 AdamW 的一步</td>
+<td>cross_entropy 吃 logits；ignore_index；AdamW 一步怎么算</td>
+<td><a href="../animations/15-sgd-vs-adamw.html">▶</a></td>
+<td>P50–P53</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><strong>D · 分布式训练</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><a href="../lessons/16-process-model.html">16</a></td>
+<td>进程模型：一张卡一个进程，靠编号分工</td>
+<td>每卡一进程；rank / local_rank / world_size；torchrun</td>
+<td><a href="../animations/16-ranks.html">▶</a></td>
+<td>P54–P57</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/17-collectives.html">17</a></td>
+<td>集合通信：五个动词和它们的代价</td>
+<td>五个集合通信动词；ring all-reduce 每卡发约 2K</td>
+<td><a href="../animations/17-ring-allreduce.html">▶</a></td>
+<td>P58–P60</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/18-ddp.html">18</a></td>
+<td>DDP：每卡一份模型，反向时边算边对答案</td>
+<td>DDP：广播参数 + 平均梯度；分桶重叠；no_sync</td>
+<td><a href="../animations/18-ddp-buckets.html">▶</a></td>
+<td>P61–P63</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/19-fsdp2.html">19</a></td>
+<td>FSDP2：每卡只存一片，用到时再拼</td>
+<td>ZeRO 1/2/3 显存账；FSDP2 层前拼、用完丢</td>
+<td><a href="../animations/19-fsdp-lifecycle.html">▶</a></td>
+<td>P64–P67</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/20-dtensor-tp.html">20</a></td>
+<td>DeviceMesh、DTensor 与张量并行</td>
+<td>DeviceMesh、DTensor 三种摆放；TP 先列切后行切</td>
+<td><a href="../animations/20-tensor-parallel.html">▶</a></td>
+<td>P68–P71</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/21-pp-cp-ep.html">21</a></td>
+<td>流水线、上下文、专家并行，以及怎么组合</td>
+<td>流水线气泡 (p − 1)/m、1F1B；CP、EP；五维组合</td>
+<td><a href="../animations/21-pipeline-bubble.html">▶</a></td>
+<td>P72–P75</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/22-dcp-debug.html">22</a></td>
+<td>分布式存档与排错：每卡存一片，卡死先查顺序</td>
+<td>DCP 每卡存一片；hang 多半是通信顺序不一致</td>
+<td><a href="../animations/22-hang.html">▶</a></td>
+<td>P76–P79</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><strong>E · 训练性能调优</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><a href="../lessons/23-perf-method.html">23</a></td>
+<td>调优方法论：先算账，再测量，只改瓶颈</td>
+<td>6N、MFU；四类瓶颈；改一处测一次</td>
+<td><a href="../animations/23-mfu.html">▶</a></td>
+<td>P80–P82</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/24-profiler.html">24</a></td>
+<td>profiler：给训练拍一段"录像"</td>
+<td>profiler：Self vs Total；fused AdamW 实测快 30%</td>
+<td><a href="../animations/24-trace.html">▶</a></td>
+<td>P83–P86</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/25-input-sync.html">25</a></td>
+<td>让 GPU 别等：数据管道与同步点</td>
+<td>等数据计时；四段数据路；揪出同步点；stream 预取</td>
+<td><a href="../animations/25-input-pipeline.html">▶</a></td>
+<td>P87–P90</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/26-mixed-precision.html">26</a></td>
+<td>混合精度：bf16、fp16、TF32、FP8 怎么选</td>
+<td>指数管范围、尾数管精度；GradScaler；TF32；FP8 缩放</td>
+<td><a href="../animations/26-float-formats.html">▶</a></td>
+<td>P91–P94</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/27-memory.html">27</a></td>
+<td>显存：谁占了、怎么省、怎么看</td>
+<td>显存四块；激活重计算 9.1 → 1.1 MB；memory snapshot</td>
+<td><a href="../animations/27-memory-curve.html">▶</a></td>
+<td>P95–P98</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/28-compile-graphs.html">28</a></td>
+<td>训练里用 compile 与 CUDA Graphs：消灭碎活和启动开销</td>
+<td>40 个小算子 compile 快 8 倍；区域编译；CUDA Graph</td>
+<td><a href="../animations/28-cuda-graph.html">▶</a></td>
+<td>P99–P102</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><strong>F · 推理优化与融合开发</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><a href="../lessons/29-why-fusion.html">29</a></td>
+<td>为什么融合能变快：算力受限与访存受限</td>
+<td>roofline；访存受限只看字节；融合实测带宽不变时间减半</td>
+<td><a href="../animations/29-roofline.html">▶</a></td>
+<td>P103–P106</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/30-inference-mode.html">30</a></td>
+<td>推理模式与 KV cache：生成一个 token 要做什么</td>
+<td>inference_mode；KV cache 原理与大小；decode 上限 = 带宽 ÷ 权重</td>
+<td><a href="../animations/30-kv-cache.html">▶</a></td>
+<td>P107–P111</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/31-read-inductor.html">31</a></td>
+<td>读 Inductor 生成的代码：它已经帮你融了什么</td>
+<td>读 Inductor 生成代码：fused kernel 名、extern 调库</td>
+<td><a href="../animations/31-inductor-fusion.html">▶</a></td>
+<td>P112–P115</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/32-triton-model.html">32</a></td>
+<td>Triton 编程模型：一个 program 处理一块数据</td>
+<td>Triton：一个 program 管一块；offs、mask、load / store</td>
+<td><a href="../animations/32-triton-grid.html">▶</a></td>
+<td>P116–P119</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/33-custom-op.html">33</a></td>
+<td>注册自定义算子：让你的 kernel 成为 PyTorch 的"一等公民"</td>
+<td>custom_op + register_fake + register_autograd + opcheck</td>
+<td><a href="../animations/33-custom-op.html">▶</a></td>
+<td>P120–P123</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/34-cpp-extension.html">34</a></td>
+<td>C++ / CUDA 扩展：TORCH_LIBRARY 把 C++ 函数登记进分派表</td>
+<td>TORCH_LIBRARY 加行、IMPL 填列；-O3；手写不自动赢</td>
+<td><a href="../animations/34-torch-library.html">▶</a></td>
+<td>P124–P127</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/35-quant-export.html">35</a></td>
+<td>量化与导出：模型变小、脱离 Python 部署</td>
+<td>对称量化；weight-only；torch.export + AOTInductor</td>
+<td><a href="../animations/35-quantize.html">▶</a></td>
+<td>P128–P131</td>
+<td>已写，练习待作答</td>
+</tr>
+<tr>
+<td><a href="../lessons/36-bench-correctness.html">36</a></td>
+<td>benchmark 与正确性：测准、对齐、再上线</td>
+<td>测准时间、有效带宽、assert_close 容差、测试矩阵</td>
+<td><a href="../animations/36-bench.html">▶</a></td>
+<td>P132–P135</td>
+<td>已写，练习待作答</td>
+</tr>
+</tbody>
+</table>
+<h2 id="_7">后续大纲</h2>
+<p>全部 36 章已写完。下一步是逐章对话讲解、作答练习（作答记录写回各章），以及 study-plan 里的里程碑 P-M0–P-M7（本机）和 P-G1–P-G3（GPU）。</p>
+<h2 id="_8">口诀汇总</h2>
+<p><strong>第 1 章 · PyTorch 做了什么</strong></p>
+<blockquote>
+<p>numpy 只会炒，PyTorch 开餐厅：多个厨房（GPU），一个记账员（autograd）；<br />
+一行代码四站走：服务员接单，前台看标签，记账员记一笔，厨房来下锅。</p>
+</blockquote>
+<p><strong>第 2 章 · Tensor 内部</strong></p>
+<blockquote>
+<p>一排数加说明书：shape 说几行几列，stride 说一步跳几格，offset 说从哪开始；<br />
+view 只换说明书，转置跳着读不连续；stride 为 0 一份当多份。</p>
+</blockquote>
+<p><strong>第 3 章 · 分派器</strong></p>
+<blockquote>
+<p>张量身上贴标签，分派器按梯子往下传：<br />
+先混合精度，再记账，再版本登记，最后进厨房；<br />
+每层干完撕标签；加功能加一列，加算子加一行；Meta 只算形状不算数。</p>
+</blockquote>
+<p><strong>第 4 章 · Autograd</strong></p>
+<blockquote>
+<p>梯度是旋钮的敏感度，链式法则把每步倍数乘起来；<br />
+前向记节点，反向倒着走，结果存叶子；<br />
+<code>.grad</code> 只会加，每步要清零；反向要用的数别原地改。</p>
+</blockquote>
+<p><strong>第 5 章 · GPU 语义</strong></p>
+<blockquote>
+<p>CPU 挂单就走，GPU 排队慢做；掐表之前先同步；<br />
+拿数回来就要等，<code>item</code>、<code>print</code>、<code>if</code> 都是坎；<br />
+一条 stream 一条队，跨队用数先等待；显存仓库借了不还，在用和借来是两个数。</p>
+</blockquote>
+<p><strong>第 6 章 · eager 与 graph</strong></p>
+<blockquote>
+<p>eager 一步一单一趟显存，compile 三道工序：Dynamo 抄图，AOTAutograd 配反向，Inductor 融合写代码；<br />
+看张量的值走分支就断图，用 where 改；guards 不过就重编，形状在变编成动态。</p>
+</blockquote>
+<p><strong>第 7 章 · <code>nn.Module</code></strong></p>
+<blockquote>
+<p>继承 Module 有 HR，赋给 self 自动登记；普通 list 不登记，要用 ModuleList；<br />
+模块成树、路径成名，state_dict 是名字到张量的清单；<br />
+train/eval 切层的行为，不管梯度；hook 是进出口的探头。</p>
+</blockquote>
+<p><strong>第 8 章 · Dataset 与 DataLoader</strong></p>
+<blockquote>
+<p>Dataset 管第 i 个是什么，DataLoader 管打乱分批拼盘；<br />
+长短不齐自己拼，补齐加 mask；<br />
+worker 数 ≥ 读一批 ÷ 训一步，pin_memory 配 non_blocking；多卡 DistributedSampler，每轮 set_epoch。</p>
+</blockquote>
+<p><strong>第 9 章 · 训练循环</strong></p>
+<blockquote>
+<p>前向、loss、清梯度、反向、更新；清梯度只要在反向前；<br />
+autocast 包前向，矩阵走 bf16；裁剪放在反向和更新之间，方向不变只缩长；<br />
+学习率先升后余弦降，调度跟在更新后。</p>
+</blockquote>
+<p><strong>第 10 章 · 保存与加载</strong></p>
+<blockquote>
+<p>存清单不存对象，先建结构再填数；<br />
+pickle 会执行代码，weights_only 只收纯数据；<br />
+续训存全套：模型、优化器、调度、步数、随机数，AdamW 存档三倍大。</p>
+</blockquote>
+<p><strong>第 11 章 · 形状与广播</strong></p>
+<blockquote>
+<p>广播从右往左对，相等或者有一个 1；1 会拉伸不复制；<br />
+恰好对上最危险，规约记得 keepdim；<br />
+拆头先切最后维，再用 transpose 换位置；einops 读代码就是读形状。</p>
+</blockquote>
+<p><strong>第 12 章 · 索引与散射</strong></p>
+<blockquote>
+<p>mask 填负无穷，softmax 后正好是零；<br />
+where 三选一形状不变，布尔索引长度看数据；<br />
+gather 按号取，scatter_add 按号加回，topk 给值又给号。</p>
+</blockquote>
+<p><strong>第 13 章 · 规约、矩阵乘与数值稳定</strong></p>
+<blockquote>
+<p>dim 是被压扁的那一维，keepdim 留位置；<br />
+矩阵乘算 2mkn，einsum 两边都有的留下、只在左边的求和；<br />
+logsumexp 先减最大，exp 就不爆；存可以低精度，累加要用 fp32。</p>
+</blockquote>
+<p><strong>第 14 章 · <code>nn.functional</code></strong></p>
+<blockquote>
+<p>有参数用 nn，纯计算用 F；LayerNorm 减均值除标准差，RMSNorm 只除均方根；<br />
+GELU、SiLU 是平滑 ReLU，SwiGLU 门乘线性再投影；<br />
+attention 用 SDPA，自动挑 Flash 不写 T 方表；想改规则写小函数，Flex 编成 kernel。</p>
+</blockquote>
+<p><strong>第 15 章 · 损失与优化器</strong></p>
+<blockquote>
+<p>cross_entropy 吃 logits 别先 softmax，算的是负 log 正确概率；<br />
+语言模型拍平再算，补齐位 ignore_index；<br />
+AdamW 先衰减，再用惯性除以平时梯度，首步约等学习率；fused 一个 kernel，bias 和 norm 不衰减。</p>
+</blockquote>
+<p><strong>第 16 章 · 进程模型</strong></p>
+<blockquote>
+<p>一卡一进程，同一份脚本，靠编号分工；<br />
+world_size 总人数，rank 全局号，local_rank 定用哪张卡，rank 0 管日志；<br />
+torchrun 起进程发编号、主节点会合；GPU 用 NCCL，Sampler 隔着分，每轮 set_epoch。</p>
+</blockquote>
+<p><strong>第 17 章 · 集合通信</strong></p>
+<blockquote>
+<p>all_reduce 加起来人人有，all_gather 拼起来人人有，reduce_scatter 加完各拿一段，broadcast 一份发全体；<br />
+大家同序调用，少一个就卡死；all_reduce 拆成两半，FSDP 在中间做事；<br />
+ring 每卡发两倍 K，几乎不随卡数涨。</p>
+</blockquote>
+<p><strong>第 18 章 · DDP</strong></p>
+<blockquote>
+<p>每卡一份模型吃不同数据，梯度平均一起改；<br />
+包装时广播参数，反向时 all_reduce 取平均，更新各自做；<br />
+梯度好一桶发一桶，通信藏在计算后；累积前几步 no_sync，参数没进 loss 要报错。</p>
+</blockquote>
+<p><strong>第 19 章 · FSDP2</strong></p>
+<blockquote>
+<p>混合精度每参十六字节，DDP 人人一整套；<br />
+ZeRO 一切优化器、二再切梯度、三连参数也切，三级每卡十六 Ψ 除以 N；<br />
+层前拼、用完丢、反向后梯度 reduce_scatter；从下往上逐层套，机内切、机间复制叫 HSDP。</p>
+</blockquote>
+<p><strong>第 20 章 · DeviceMesh、DTensor 与张量并行</strong></p>
+<blockquote>
+<p>mesh 把卡排成表，每一维一种并行一个组；<br />
+DTensor 三种摆：Shard 切开、Replicate 复制、Partial 部分和，换摆法就是通信；<br />
+TP 先列后行，中间不传、最后一次 all_reduce；只在机内用，SP 再把 norm 按序列切。</p>
+</blockquote>
+<p><strong>第 21 章 · 流水线、上下文、专家并行，以及怎么组合</strong></p>
+<blockquote>
+<p>按层切成流水线，段间传激活；一个 batch 气泡大，p − 1 倍在空等；<br />
+切成 m 个小批，气泡降到 (p − 1) / m；1F1B 前反交替，激活不随 m 涨；<br />
+序列太长 CP 绕圈传 KV，专家分卡 all_to_all；最勤的通信放机内，最疏的放外层。</p>
+</blockquote>
+<p><strong>第 22 章 · 分布式存档与排错</strong></p>
+<blockquote>
+<p>分布式存档每卡存一片，元数据记位置，换卡数照样读；save、load 人人都要调；<br />
+卡死多半是通信次数顺序不一致：条件分支、提前退出、只让 rank 0 调；<br />
+先设超时，再开 DETAIL，py-spy 看停在哪，NCCL_DEBUG 看网络。</p>
+</blockquote>
+<p><strong>第 23 章 · 调优方法论</strong></p>
+<blockquote>
+<p>每个 token 六倍参数：前向二、反向四；<br />
+MFU 等于六 N 乘吞吐，除以卡数乘峰值；dense 五成好，MoE 四成一流；<br />
+闲着、访存、算、通信，先看时间线；改一处测一次，别忘对 loss。</p>
+</blockquote>
+<p><strong>第 24 章 · profiler</strong></p>
+<blockquote>
+<p>profile 加 schedule，跳过热身只录稳定步；record_function 起名字，trace 拖进 perfetto；<br />
+Self 是自己干、Total 含子孙，Total 大 Self 小底下全是碎活；<br />
+找最大的块改一处再测；时间线上找空白、找细条、找没藏住的 NCCL。</p>
+</blockquote>
+<p><strong>第 25 章 · 让 GPU 别等</strong></p>
+<blockquote>
+<p>先拆两段计时，数据不慢别瞎改；<br />
+读取、处理、拼盘、拷贝四段路，能离线就离线，能并行就并行，拷贝用 pin 加 non_blocking；<br />
+同步点藏在日志和指标里，sync_debug_mode 帮你找；第二条 stream 提前拷下一批。</p>
+</blockquote>
+<p><strong>第 26 章 · 混合精度</strong></p>
+<blockquote>
+<p>指数管范围、尾数管精度；bf16 宽而粗，fp16 细而窄；<br />
+fp16 梯度会下溢，GradScaler 先放大再除回；bf16 不用 scaler，累加记得用 fp32；<br />
+fp32 一行开 TF32；FP8 再快一倍，靠缩放系数，粒度越细越稳。</p>
+</blockquote>
+<p><strong>第 27 章 · 显存</strong></p>
+<blockquote>
+<p>显存四块：模型状态十六 Ψ、激活随 b s h L、临时和碎片；长序列激活比参数大；<br />
+重计算只存每块输入，反向再跑一遍前向，多三分之一算力；<br />
+OOM 先录快照看是谁；bf16、Flash、减 batch、重计算、FSDP，offload 最后。</p>
+</blockquote>
+<p><strong>第 28 章 · 训练里用 compile 与 CUDA Graphs</strong></p>
+<blockquote>
+<p>小算子多时下单比做菜贵，compile 融合减单数；<br />
+大模型按块区域编，同构只编一次，变长输入补齐分桶；<br />
+CUDA Graph 录一次套餐号，形状地址要固定、不能同步和新分配；reduce-overhead 自动录；细条加空隙就该上。</p>
+</blockquote>
+<p><strong>第 29 章 · 为什么融合能变快</strong></p>
+<blockquote>
+<p>时间看两笔：算的和搬的，谁大谁是瓶颈；算术强度低于拐点就是访存受限；<br />
+矩阵乘吃算力，其余算子吃带宽，时间只看读写字节；<br />
+融合不让中间结果落显存，带宽不变字节减半时间减半；手写之前先算离理论最快还差多少。</p>
+</blockquote>
+<p><strong>第 30 章 · 推理模式与 KV cache</strong></p>
+<blockquote>
+<p>推理开 eval 加 inference_mode：切层的行为、关记账和版本号；<br />
+因果 attention 旧 KV 不变，存进 cache 每步只算新 token；<br />
+每 token cache 是 2 乘层乘 KV 头乘头维乘字节，GQA 共享省几倍；<br />
+prefill 吃算力、decode 吃带宽，上限是带宽除以权重字节；静态 cache 才能录 CUDA Graph。</p>
+</blockquote>
+<p><strong>第 31 章 · 读 Inductor 生成的代码</strong></p>
+<blockquote>
+<p>拿代码：run_and_get_code、output_code、COMPILE_DEBUG；<br />
+名字里列着融进去的算子，矩阵乘走 extern 调库；<br />
+数 kernel、数 buf、找 clone；改算法级的融合，compile 不会，用库或手写。</p>
+</blockquote>
+<p><strong>第 32 章 · Triton 编程模型</strong></p>
+<blockquote>
+<p>CUDA 写一个线程，Triton 写一个 program 管一块；<br />
+program_id 定位，arange 拿下标，mask 挡越界，load、store 整块读写；<br />
+grid 向上取整；行规约一行一个 program，越界补不影响结果的值；块大小交给 autotune。</p>
+</blockquote>
+<p><strong>第 33 章 · 注册自定义算子</strong></p>
+<blockquote>
+<p>直接调用没人认，注册进分派表才算正式算子；<br />
+custom_op 写签名、声明改了谁，register_fake 只报形状，compile、export 才能用；<br />
+register_autograd 存东西给梯度；opcheck 查注册，assert_close 查数值；Triton 用 triton_op，编译器看得进去。</p>
+</blockquote>
+<p><strong>第 34 章 · C++ / CUDA 扩展</strong></p>
+<blockquote>
+<p>先 compile、再 Triton，要 CUTLASS、PTX、包装库才写 C++；<br />
+实现 + TORCH_LIBRARY 加一行 + TORCH_LIBRARY_IMPL 按设备填一列，fake 和反向 Python 里补；<br />
+load_inline 学习、setup.py 发布，ninja 要在 PATH；-O3 先写对，手写不自动赢，三方实测再定。</p>
+</blockquote>
+<p><strong>第 35 章 · 量化与导出</strong></p>
+<blockquote>
+<p>量化是粗尺子加系数：s 等于最大绝对值除以 127，存 round(w/s)，用时乘回 s；<br />
+位数越少格子越粗，int4 要分组；decode 吃带宽，weight-only 最划算；<br />
+export 抓整图、抓不下就报错，Dim 声明会变的维；AOTInductor 提前编成 .pt2，C++ 也能跑。</p>
+</blockquote>
+<p><strong>第 36 章 · benchmark 与正确性</strong></p>
+<blockquote>
+<p>测时间：先热身、要同步、多次取中位、线程数一致，GPU 用 do_bench；<br />
+有效带宽是必须字节除以时间，和峰值比才知好坏；<br />
+对数值：assert_close 按 dtype 定容差，参考用高精度、反向也要比；<br />
+测试矩阵别偷懒：不整除、不连续、边界值、compile 里也要跑；发现、判断、写、注册、验、测、接、守。</p>
+</blockquote>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

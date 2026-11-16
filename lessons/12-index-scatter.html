@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 12 章 · 索引与散射：按掩码挑、按下标取、按下标写回 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="12">第 12 章 · 索引与散射：按掩码挑、按下标取、按下标写回</h1><p><a class="btn" href="../animations/12-gather-scatter.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：attention 里的 mask 怎么"遮"？<code>torch.where</code> 为什么比 Python 的 <code>if</code> 好？<code>gather</code> 和 <code>scatter_add</code> 各在什么场景用（取目标类的概率、MoE 合并专家输出）？<code>topk</code> 返回什么？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/11-shape-broadcast.html">第 11 章 形状与广播</a> · 下一章：<a href="../lessons/13-reduce-matmul.html">第 13 章 规约与矩阵乘</a><br />
+对应原文：00-overview.md §4.3；官方文档 <code>torch.gather</code> / <code>Tensor.scatter_add_</code> / <code>torch.where</code>（〔在线〕）；Transformer 讲义 第 17 章 因果 mask；本章输出在本机 torch 2.15.0 上跑过</p>
+<p>本章缩写：MoE = Mixture of Experts（混合 / 专家：每个 token 只送给少数几个"专家"子网络）；idx = index（下标）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="mask-2026-11-14">第一步：mask——给不能看的位置填 −∞（2026-11-14）</h3>
+<p><strong>mask（掩码）</strong> = 一个和数据同形状的真 / 假表，True 表示"保留"。最常见的用法是 attention 的因果遮挡（Transformer 第 17 章）：分数表里"不许看"的位置填成 −∞，softmax 之后就正好是 0。</p>
+<pre><code class="language-python">s = torch.tensor([[2.0, 1.0, 0.0],
+                  [0.5, 3.0, 1.0]])
+keep = torch.tensor([[True, False, False],
+                     [True, True,  False]])
+s.masked_fill(~keep, float(&quot;-inf&quot;)).softmax(-1)
+# tensor([[1.0000, 0.0000, 0.0000],
+#         [0.0759, 0.9241, 0.0000]])
+</code></pre>
+<p>第 2 行只剩 0.5 和 3.0 参与：<span class="arithmatex">\(\frac{e^{0.5}}{e^{0.5} + e^{3}} = \frac{1.65}{1.65 + 20.09} = 0.0759\)</span> ✓。<code>~</code> 是取反（True ↔ False）。</p>
+<p><strong>一句话</strong>：mask 是同形状的真假表；<code>masked_fill(~keep, -inf)</code> 再 softmax，被遮的位置权重正好为 0。</p>
+<h3 id="torchwhere-python-if2026-11-14">第二步：<code>torch.where</code>——三选一，替代 Python if（2026-11-14）</h3>
+<p><code>torch.where(cond, a, b)</code>：<strong>逐个元素</strong>看条件，真取 a、假取 b。</p>
+<pre><code class="language-python">x = torch.tensor([-2.0, 1.0, 3.0])
+torch.where(x &gt; 0, x, 0.1 * x)      # tensor([-0.2000, 1.0000, 3.0000])   ← 这就是 LeakyReLU
+</code></pre>
+<p>为什么不写 Python 的 <code>if</code>？<code>if x &gt; 0</code> 只能对<strong>一个</strong>数做判断，而且要把数拿回 CPU（第 5 章同步点），在 <code>torch.compile</code> 里还会断图（第 6 章）。<code>where</code> 对整个张量一次算完，全在 GPU 上，编译器也能融合。代价是 a、b <strong>两边都要算</strong>。</p>
+<p><strong>布尔索引的区别</strong>：<code>x[x &gt; 0]</code> 返回 <code>tensor([1., 3.])</code>，<strong>只有 2 个元素</strong>：输出大小取决于数据。这类操作（还有 <code>nonzero</code>、<code>unique</code>）要先知道有几个 True 才能分配结果，是同步点，也让编译器难办。能用 <code>where</code> / <code>masked_fill</code> 保持形状不变的，就别用布尔索引。</p>
+<p><strong>一句话</strong>：where 逐元素三选一、形状不变、不同步；布尔索引结果长度看数据，慢且难编译。</p>
+<h3 id="gather2026-11-14">第三步：<code>gather</code>——每行按自己的下标取一个（2026-11-14）</h3>
+<p><strong>类比：点名领卷子。</strong> 每个学生（行）手里有一张号码条（下标），去自己那一排的第几号位置拿东西。</p>
+<p>最典型的场景：<strong>取出每个样本正确类别的 log 概率</strong>（算交叉熵 loss 就是这一步，第 15 章）。</p>
+<pre><code class="language-python">logp = torch.log(torch.tensor([[0.7, 0.2, 0.1],     # 样本 0 的三类概率
+                               [0.1, 0.3, 0.6]]))   # 样本 1
+tgt = torch.tensor([0, 2])                           # 样本 0 答案是类 0，样本 1 是类 2
+logp.gather(1, tgt.unsqueeze(1)).squeeze(1)
+# tensor([-0.3567, -0.5108])     ← log 0.7 和 log 0.6
+</code></pre>
+<p>规则：<code>out[i][j] = input[i][ index[i][j] ]</code>（dim=1 时）。index 要和输出同形状，所以要先 <code>unsqueeze(1)</code> 变成 (2, 1)，取完再 <code>squeeze</code>。</p>
+<p>同类函数：<code>take_along_dim</code>（同样的事，参数更直观）、<code>index_select</code>（所有行用同一组下标）。</p>
+<p><strong>一句话</strong>：gather 让每行按自己的下标取值；<code>out[i][j] = input[i][index[i][j]]</code>。</p>
+<h3 id="scatter_add2026-11-14">第四步：<code>scatter_add</code>——按下标往回加（2026-11-14）</h3>
+<p>gather 的反方向：拿着一串值，按下标<strong>加到</strong>目标位置上，同一个位置可以被加好几次。</p>
+<pre><code class="language-python">out = torch.zeros(3)
+idx = torch.tensor([0, 2, 0, 1])
+src = torch.tensor([1., 2., 3., 4.])
+out.scatter_add(0, idx, src)        # tensor([4., 4., 2.])
+</code></pre>
+<p>位置 0 收到第 1 个和第 3 个值：1 + 3 = 4；位置 1 收到 4；位置 2 收到 2。<code>index_add(0, idx, src)</code> 结果一样，写法更顺。</p>
+<p><strong>场景：MoE 合并专家输出</strong>。4 个 token 被路由到不同专家算完，结果要按 token 编号加回原来的位置（一个 token 若去了 2 个专家，两份结果按权重加起来）——就是 <code>index_add</code> / <code>scatter_add</code>。再比如：统计每个类别出现几次（<code>bincount</code> 也是它的特例）、图神经网络把邻居消息加到节点上。</p>
+<p><strong>注意</strong>：<code>scatter_</code>（不带 add）是"写入"，同一位置写多次时<strong>谁最后写算谁</strong>，GPU 上顺序不确定。要累加一定用 <code>_add</code> 版。</p>
+<p><strong>一句话</strong>：scatter_add 按下标把值加回去，同一位置可累加；MoE 合并、计数都用它；不带 add 的重复写顺序不定。</p>
+<h3 id="topk-k-2026-11-14">第五步：<code>topk</code>——前 k 大的值和位置（2026-11-14）</h3>
+<pre><code class="language-python">v, i = torch.tensor([0.1, 0.5, 0.2, 0.9]).topk(2)
+v, i            # (tensor([0.9000, 0.5000]), tensor([3, 1]))
+</code></pre>
+<p>返回<strong>值</strong>和<strong>下标</strong>两样。MoE 路由：每个 token 对所有专家打分，<code>topk(2)</code> 选出分最高的 2 个专家（下标）和对应的权重（值）；采样时的 top-k 采样也是它。下标接着交给第三、四步的 gather / scatter 去取数和写回。</p>
+<p><strong>一句话</strong>：topk 同时给值和下标，下标再交给 gather / scatter 用。</p>
+<h3 id="gather-scatter_add">动画演示：gather 与 scatter_add</h3>
+<p><img alt="gather 与 scatter_add" src="../animations/12-gather-scatter.gif" /></p>
+<p>可交互版：<a href="../animations/12-gather-scatter.html">animations/12-gather-scatter.html</a>。按钮切换 gather / scatter_add。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>gather：两行概率表，每行按自己的目标下标画一条线取出一个数；</li>
+<li>scatter_add：四个值按下标落到三个格子里，格子 0 被加了两次，数字逐步累加；</li>
+<li>每一步下方写出对应的下标公式。</li>
+</ol>
+<h2 id="_2">练习与作答记录</h2>
+<p><strong>题 1</strong>：分数 <code>[[1.0, 2.0, 3.0]]</code>，mask <code>[[True, True, False]]</code>。<code>masked_fill(~mask, -inf).softmax(-1)</code> 的结果是多少？（<span class="arithmatex">\(e^1 ≈ 2.72\)</span>，<span class="arithmatex">\(e^2 ≈ 7.39\)</span>）</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：<code>out = torch.zeros(4)</code>，<code>idx = [3, 1, 3, 3]</code>，<code>src = [1., 2., 3., 4.]</code>。<code>out.scatter_add(0, idx, src)</code> 是多少？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：<code>x[x &gt; 0]</code> 和 <code>torch.where(x &gt; 0, x, 0)</code> 输出有什么不同？为什么后者对 GPU 和 <code>torch.compile</code> 更友好？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_3">口诀</h2>
+<blockquote>
+<p>mask 填负无穷，softmax 后正好是零；<br />
+where 三选一形状不变，布尔索引长度看数据；<br />
+gather 按号取，scatter_add 按号加回，topk 给值又给号。</p>
+</blockquote>
+<h2 id="_4">本章复习卡片</h2>
+<ul>
+<li>P37（masked_fill(~keep, -inf) + softmax；[0.5, 3.0] → 0.0759 / 0.9241）</li>
+<li>P38（where vs 布尔索引：形状不变 / 同步与断图）</li>
+<li>P39（gather 公式 <code>out[i][j] = input[i][index[i][j]]</code>；取目标类 log 概率）</li>
+<li>P40（scatter_add / index_add：[0, 2, 0, 1] + [1, 2, 3, 4] → [4, 4, 2]；scatter_ 重复写顺序不定；topk 返回值和下标）</li>
+</ul>
+<h2 id="_5">附录 · 延伸阅读</h2>
+<h3 id="_6">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ 官方文档 <code>torch.gather</code>、<code>Tensor.scatter_add_</code></td>
+<td>公式部分（〔在线〕）</td>
+<td>三维情况下各个 dim 怎么对应</td>
+</tr>
+<tr>
+<td>★ Transformer 讲义</td>
+<td>第 17 章 因果 mask</td>
+<td>为什么填 −∞ 而不是 0</td>
+</tr>
+<tr>
+<td>Shazeer et al. 2017「Outrageously Large Neural Networks」</td>
+<td>§2 Sparsely-Gated MoE（〔在线〕arXiv:1701.06538）</td>
+<td>topk 路由 + 加权合并的出处</td>
+</tr>
+<tr>
+<td>官方文档 Reproducibility</td>
+<td>"Avoiding nondeterministic algorithms"（〔在线〕）</td>
+<td>哪些 scatter / index 操作在 GPU 上不确定</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_7">数学原理</h3>
+<ul>
+<li><strong>softmax 遇到 −∞</strong>：<span class="arithmatex">\(e^{-\infty} = 0\)</span>，所以被遮的项在分子分母里都消失，剩下的重新归一化。</li>
+<li><strong>gather / scatter 互为转置</strong>：gather 是"按下标读"，scatter_add 是"按下标累加写"；反向传播时 gather 的梯度就是对上游梯度做 scatter_add。</li>
+</ul>
+<h3 id="_8">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>x.masked_fill(mask, v)</code></td>
+<td>mask 为 True 的位置填 v</td>
+</tr>
+<tr>
+<td><code>torch.where(c, a, b)</code></td>
+<td>逐元素三选一</td>
+</tr>
+<tr>
+<td><code>x.gather(dim, idx)</code></td>
+<td><code>out[i][j] = x[i][idx[i][j]]</code>（dim = 1）</td>
+</tr>
+<tr>
+<td><code>out.scatter_add(dim, idx, src)</code> / <code>index_add</code></td>
+<td>按下标累加</td>
+</tr>
+<tr>
+<td><code>x.topk(k, dim)</code></td>
+<td>前 k 大的值和下标</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch12_index_scatter.py</code>，配套测试 <code>tests/test_ch07_15.py</code>；同一章的 notebook：<code>notebooks/ch12_index_scatter.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch12_index_scatter.py   # 一步一步打印  
+uv run pytest tests/test_ch07_15.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 mask</td>
+<td>填 −∞ 再 softmax</td>
+<td><code>masked_softmax()</code></td>
+<td>第 2 行 [0.0759, 0.9241, 0]</td>
+</tr>
+<tr>
+<td>第二步 where</td>
+<td>逐元素三选一</td>
+<td><code>leaky_where()</code></td>
+<td>[−0.2, 1, 3]；布尔索引只剩 2 个</td>
+</tr>
+<tr>
+<td>第三步 gather</td>
+<td>out[i] = logp[i][tgt[i]]</td>
+<td><code>gather_target_logp()</code></td>
+<td>[−0.3567, −0.5108]</td>
+</tr>
+<tr>
+<td>第四步 scatter_add</td>
+<td>按下标累加</td>
+<td><code>scatter_add_demo()</code></td>
+<td>[4, 4, 2]</td>
+</tr>
+<tr>
+<td>第五步 topk</td>
+<td>值和下标</td>
+<td><code>topk_demo()</code></td>
+<td>[0.9, 0.5]、[3, 1]</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">s.masked_fill(~keep, float(&quot;-inf&quot;)).softmax(-1)
+torch.where(x &gt; 0, x, 0.1 * x)
+logp.gather(1, tgt.unsqueeze(1)).squeeze(1)
+out.scatter_add(0, idx, src)
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong>gather 的 index 要和输出同形状</strong>：所以先 <code>unsqueeze(1)</code> 变成 (2, 1)。</li>
+<li><strong><code>scatter_add</code> 返回新张量，<code>scatter_add_</code> 原地改</strong>：带下划线的都是原地版本。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把 <code>scatter_add_demo</code> 的 idx 改成全 0，看结果。</li>
+<li><code>topk(2, largest=False)</code> 取最小的两个。</li>
+</ul><nav class="pager"><a href="11-shape-broadcast.html">← 第 11 章 · 形状与广播：从右往左对齐，1 可以拉伸</a><a href="13-reduce-matmul.html">第 13 章 · 规约、矩阵乘与数值稳定 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

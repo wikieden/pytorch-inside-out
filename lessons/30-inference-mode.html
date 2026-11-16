@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 30 章 · 推理模式与 KV cache：生成一个 token 要做什么 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="30-kv-cache-token">第 30 章 · 推理模式与 KV cache：生成一个 token 要做什么</h1><p><a class="btn" href="../animations/30-kv-cache.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：推理时 <code>eval()</code>、<code>no_grad()</code>、<code>inference_mode()</code> 各关掉了什么？语言模型一个一个 token 往外吐，为什么要 KV cache，它有多大？为什么 decode 阶段是访存受限，batch 1 的速度上限怎么算？静态 cache + CUDA Graph 是怎么回事？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/29-why-fusion.html">第 29 章 为什么融合</a> · 下一章：<a href="../lessons/31-read-inductor.html">第 31 章 读 Inductor 代码</a><br />
+对应原文：gpt-fast 仓库与博客「Accelerating Generative AI with PyTorch II: GPT, Fast」（〔在线〕pytorch.org/blog/accelerating-generative-ai-2/）；LLM 全链路地图（<code>llm-full-stack/notes/00-full-stack-map.md</code>）推理部分；Transformer 讲义 第 17 章 因果 mask；本章正确性和 inference_mode 行为在本机 torch 2.15.0 上验证过</p>
+<p>本章缩写：KV = Key / Value（注意力里的键和值）；prefill（预填充）= 一次性处理整段提示词；decode（解码）= 之后一个一个生成 token；GQA = Grouped-Query Attention（分组 / 查询 / 注意力）；tok/s = tokens per second；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="2026-11-14">第一步：推理的三个开关（2026-11-14）</h3>
+<table>
+<thead>
+<tr>
+<th>开关</th>
+<th>关掉了什么</th>
+<th>不开会怎样</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>model.eval()</code></td>
+<td>Dropout 不丢、BatchNorm 用存下的统计量（第 7 章）</td>
+<td>结果随机、随 batch 变</td>
+</tr>
+<tr>
+<td><code>torch.no_grad()</code></td>
+<td>不记账：不建计算图、不存反向要用的张量</td>
+<td>白白多占显存和时间</td>
+</tr>
+<tr>
+<td><code>torch.inference_mode()</code></td>
+<td><code>no_grad</code> 的全部，再加：新张量不带 Autograd 标签、不记版本号（第 3 章）</td>
+<td>比 no_grad 再快一点</td>
+</tr>
+</tbody>
+</table>
+<p><strong>实测</strong>：<code>inference_mode</code> 里算出的张量 <code>is_inference() = True</code>；之后想拿它去参与要求导的计算（比如喂进模型再 backward），报错 <code>Inference tensors cannot be saved for backward</code>。所以纯推理用 <code>inference_mode</code>，推理结果还要拿去训练的场景（如强化学习采样后算 loss）用 <code>no_grad</code>。</p>
+<p><strong>一句话</strong>：推理 = eval（切层的行为）+ inference_mode（关掉记账和版本号）。</p>
+<h3 id="token-cache-2026-11-14">第二步：一个一个 token 生成——不带 cache 的浪费（2026-11-14）</h3>
+<p>语言模型生成文本：给提示词，预测下一个 token，把它接到后面，再预测下一个……</p>
+<p><strong>不带 cache</strong>：第 t 步把<strong>整段</strong>（t 个 token）重新喂进模型。但因果 attention（Transformer 第 17 章）里，<strong>前面的 token 看不到后面的</strong>，所以前 t − 1 个 token 的 K、V <strong>每一步算出来都一样</strong>。重复算了。</p>
+<table>
+<thead>
+<tr>
+<th>生成到第 t 步</th>
+<th>不带 cache 要算的 token 数</th>
+<th>带 cache</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+</tr>
+<tr>
+<td>2</td>
+<td>2</td>
+<td>1</td>
+</tr>
+<tr>
+<td>…</td>
+<td>…</td>
+<td>…</td>
+</tr>
+<tr>
+<td>T</td>
+<td>T</td>
+<td>1</td>
+</tr>
+<tr>
+<td>合计</td>
+<td><span class="arithmatex">\(\frac{T(T+1)}{2}\)</span></td>
+<td><span class="arithmatex">\(T\)</span></td>
+</tr>
+</tbody>
+</table>
+<p><strong>KV cache</strong>：每一层把每个 token 的 K、V <strong>存下来</strong>。新 token 来了，只算它自己的 q、k、v，k、v 接到 cache 后面，q 和整个 cache 做 attention。</p>
+<p><strong>验证</strong>（本机）：6 个 token、维度 8，一步步用 cache 算的输出，和一次性因果 attention 算的完全一致（<code>allclose</code> = True）。</p>
+<p><strong>一句话</strong>：因果 attention 里旧 token 的 K、V 不变，存下来（KV cache），每步只算新 token。</p>
+<h3 id="kv-cache-2026-11-14">第三步：KV cache 有多大（2026-11-14）</h3>
+<p>每个 token、每一层要存一份 K 和一份 V：</p>
+<div class="arithmatex">\[\text{每 token 字节} = 2 \times L \times n_{kv} \times d_{head} \times \text{每数字节}\]</div>
+<p>读法：2（K 和 V）× 层数 × KV 头数 × 每头维度 × 字节。</p>
+<p><strong>数字演示</strong>：Llama-2-7B（L = 32，32 个头，每头 128 维，fp16 2 字节）：</p>
+<div class="arithmatex">\[2 \times 32 \times 32 \times 128 \times 2 = 524288 \text{ 字节} = 0.5 \text{ MB/token}\]</div>
+<p>一条 4096 token 的对话就是 <strong>2 GiB</strong>；batch 32 就是 64 GiB，比模型本身（14 GB）还大。</p>
+<p>所以新模型都在压 KV cache：<strong>GQA</strong>（分组查询注意力）让好几个 q 头<strong>共用</strong>一组 K、V 头。Llama-3-8B 有 32 个 q 头但只有 8 个 KV 头，每 token 只要 <span class="arithmatex">\(2 \times 32 \times 8 \times 128 \times 2 = 128\)</span> KB，是原来的 1/4。</p>
+<p><strong>一句话</strong>：KV cache = 2 × 层数 × KV 头数 × 头维度 × 字节，每 token；7B 约 0.5 MB/token，GQA 共享 KV 头能省几倍。</p>
+<h3 id="prefill-decode2026-11-14">第四步：prefill 与 decode——两种完全不同的负载（2026-11-14）</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>prefill（处理提示词）</th>
+<th>decode（逐个生成）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>一次处理</td>
+<td>整段 T 个 token</td>
+<td>1 个 token</td>
+</tr>
+<tr>
+<td>矩阵乘形状</td>
+<td>(T, d) @ (d, d)：大</td>
+<td>(1, d) @ (d, d)：一行乘矩阵</td>
+</tr>
+<tr>
+<td>第 29 章的分类</td>
+<td><strong>算力受限</strong></td>
+<td><strong>访存受限</strong>：每个 token 要把<strong>全部权重</strong>从显存读一遍，只做很少的运算</td>
+</tr>
+</tbody>
+</table>
+<p><strong>decode 的速度上限</strong>（batch 1）：每生成一个 token，至少读一遍全部权重。7B bf16 = 14 GB，H100 带宽 3.35 TB/s：</p>
+<div class="arithmatex">\[\frac{3.35 \times 10^{12}}{14 \times 10^9} ≈ 240 \text{ tok/s}\]</div>
+<p>这是<strong>理论天花板</strong>，和算力几乎无关。提速的方向因此也很明确：</p>
+<ul>
+<li><strong>减少要读的字节</strong>：量化（int8 / int4 权重，第 35 章），字节减半速度近似翻倍；</li>
+<li><strong>一次读、多次用</strong>：batch 变大，读一遍权重同时服务多个请求（推理服务的连续批处理）；</li>
+<li><strong>去掉 launch 开销</strong>：decode 每步几百个小 kernel，每个都很短，正是第 28 章说的 launch 受限场景。</li>
+</ul>
+<p><strong>一句话</strong>：prefill 算力受限，decode 访存受限；batch 1 的上限 ≈ 带宽 ÷ 权重字节（7B 在 H100 上约 240 tok/s）。</p>
+<h3 id="cache-cuda-graphgpt-fast-2026-11-14">第五步：静态 cache + CUDA Graph（gpt-fast 的做法）（2026-11-14）</h3>
+<p>第 28 章说 CUDA Graph 要求形状和地址固定。可 KV cache 每一步都在变长，<code>torch.cat</code> 每步还会新分配显存。办法：</p>
+<ol>
+<li><strong>静态 KV cache</strong>：一开始就按最大长度分配好 (B, H, T_max, d) 的张量，每步用下标把新的 k、v <strong>写进</strong>第 t 个位置（<code>index_copy_</code> 或直接切片赋值），形状和地址永远不变；</li>
+<li>attention 用一个 mask 只看前 t 个位置（后面的空位遮掉，第 12 章）；</li>
+<li>整个 decode 一步 <code>torch.compile(mode="reduce-overhead")</code>，录成 CUDA Graph，每步一次重放。</li>
+</ol>
+<p>PyTorch 团队的 gpt-fast 用约 1000 行纯 PyTorch，把 Llama-2-7B 的 batch-1 decode 从约 25 tok/s 提到接近带宽上限（加上 int4 量化再翻倍），手段就是：静态 cache + compile + CUDA Graph + 量化 + 投机解码。Hugging Face transformers 里对应的是 <code>cache_implementation="static"</code>。</p>
+<p><strong>一句话</strong>：把 KV cache 改成预分配、按下标写入的静态张量，形状地址不变，decode 一步就能录成 CUDA Graph。</p>
+<h3 id="cache-cache">动画演示：有 cache 与没 cache</h3>
+<p><img alt="KV cache" src="../animations/30-kv-cache.gif" /></p>
+<p>可交互版：<a href="../animations/30-kv-cache.html">animations/30-kv-cache.html</a>。开关：<strong>KV cache 开 / 关</strong>。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>每一行是生成的一步，格子是这一步要算 K、V 的 token；</li>
+<li>不带 cache：第 t 步要算 t 个格子，像一个三角形，累计 T(T+1)/2；</li>
+<li>带 cache：每步只算 1 个新格子（亮），旧的从 cache 里直接读（灰）；</li>
+<li>右边计数器：累计计算量和 cache 占用的字节。</li>
+</ol>
+<h2 id="_2">练习与作答记录</h2>
+<p><strong>题 1</strong>：<code>no_grad()</code> 和 <code>inference_mode()</code> 都不记账，<code>inference_mode</code> 额外省了什么？什么情况下只能用 <code>no_grad</code>？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：一个模型 L = 40 层，40 个 q 头、8 个 KV 头，每头 128 维，bf16。每 token 的 KV cache 多大？一条 8192 token 的序列呢？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：13B 模型 bf16，A100 带宽约 2 TB/s。batch 1 decode 的理论上限是多少 tok/s？把权重量化成 int4（每参数 0.5 字节）后呢？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_3">口诀</h2>
+<blockquote>
+<p>推理开 eval 加 inference_mode：切层的行为、关记账和版本号；<br />
+因果 attention 旧 KV 不变，存进 cache 每步只算新 token；<br />
+每 token cache 是 2 乘层乘 KV 头乘头维乘字节，GQA 共享省几倍；<br />
+prefill 吃算力、decode 吃带宽，上限是带宽除以权重字节；静态 cache 才能录 CUDA Graph。</p>
+</blockquote>
+<h2 id="_4">本章复习卡片</h2>
+<ul>
+<li>P107（eval / no_grad / inference_mode 的区别；inference 张量不能存给反向）</li>
+<li>P108（KV cache 原理：不带 cache 累计 T(T+1)/2，带 cache T；实测一致）</li>
+<li>P109（KV cache 大小公式；Llama-2-7B 0.5 MB/token、4096 token 2 GiB；GQA）</li>
+<li>P110（prefill 算力受限、decode 访存受限；上限 = 带宽 ÷ 权重字节，7B H100 约 240 tok/s）</li>
+<li>P111（静态 KV cache + compile reduce-overhead；gpt-fast）</li>
+</ul>
+<h2 id="_5">附录 · 延伸阅读</h2>
+<h3 id="_6">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ PyTorch 博客「Accelerating Generative AI with PyTorch II: GPT, Fast」</td>
+<td>全文（〔在线〕）</td>
+<td>静态 cache、compile、int4、投机解码一步步的提速数字</td>
+</tr>
+<tr>
+<td>★ gpt-fast 仓库</td>
+<td><code>model.py</code> 的 <code>KVCache</code> 类、<code>generate.py</code>（〔在线〕github.com/pytorch-labs/gpt-fast）</td>
+<td>静态 KV cache 的写法</td>
+</tr>
+<tr>
+<td>LLM 全链路地图</td>
+<td><code>llm-full-stack/notes/00-full-stack-map.md</code> 推理 / 服务部分</td>
+<td>vLLM、SGLang、连续批处理、P/D 分离</td>
+</tr>
+<tr>
+<td>Ainslie et al. 2023「GQA」</td>
+<td>§2（〔在线〕arXiv:2305.13245）</td>
+<td>分组查询注意力</td>
+</tr>
+<tr>
+<td>Pope et al. 2022「Efficiently Scaling Transformer Inference」</td>
+<td>§2–3（〔在线〕arXiv:2211.05102）</td>
+<td>prefill / decode 的算力与带宽分析</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_7">数学原理</h3>
+<ul>
+<li><strong>不带 cache 的累计计算</strong>：<span class="arithmatex">\(\sum_{t=1}^{T} t = \frac{T(T+1)}{2}\)</span>，<span class="arithmatex">\(O(T^2)\)</span>；带 cache <span class="arithmatex">\(O(T)\)</span>（attention 本身每步仍是 <span class="arithmatex">\(O(t)\)</span>）。</li>
+<li><strong>decode 上限</strong>：<span class="arithmatex">\(\text{tok/s} \le \frac{B_{mem}}{\text{权重字节} + \text{KV cache 字节}}\)</span>（batch 1；长上下文时 KV cache 也要读）。</li>
+<li><strong>KV cache 字节</strong>：<span class="arithmatex">\(2 L n_{kv} d_{head} s\)</span> 每 token（s 为每数字节）。</li>
+</ul>
+<h3 id="_8">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>model.eval()</code> + <code>with torch.inference_mode():</code></td>
+<td>推理</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(2 L n_{kv} d_{head} s\)</span></td>
+<td>每 token KV cache</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(B_{mem} / \text{weight bytes}\)</span></td>
+<td>decode 上限</td>
+</tr>
+<tr>
+<td><code>k_cache[:, :, pos] = k_new</code>（预分配）</td>
+<td>静态 cache 写入</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch30_inference_mode.py</code>，配套测试 <code>tests/test_ch29_36.py</code>；同一章的 notebook：<code>notebooks/ch30_inference_mode.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch30_inference_mode.py   # 一步一步打印  
+uv run pytest tests/test_ch29_36.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 inference 张量</td>
+<td>不能存给反向</td>
+<td><code>inference_tensor_error()</code></td>
+<td>Inference tensors cannot be saved for backward</td>
+</tr>
+<tr>
+<td>第二步 KV cache</td>
+<td>一步步算 = 一次算</td>
+<td><code>kv_cache_matches()</code></td>
+<td>True</td>
+</tr>
+<tr>
+<td>第三步 cache 大小</td>
+<td>2·L·n_kv·d·2</td>
+<td><code>kv_bytes_per_token(32, 32, 128)</code></td>
+<td>524288（0.5 MB），GQA 131072</td>
+</tr>
+<tr>
+<td>第四步 decode 上限</td>
+<td>带宽 ÷ 权重字节</td>
+<td><code>decode_ceiling(3.35e12, 14e9)</code></td>
+<td>239 tok/s</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">q = x[t:t + 1] @ Wq
+K.append(x[t:t + 1] @ Wk); V.append(x[t:t + 1] @ Wv)
+F.scaled_dot_product_attention(q[None], torch.cat(K)[None], torch.cat(V)[None])
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong>带 cache 的那一步不用 <code>is_causal</code></strong>：新 token 本来就只能看到前面已经存进 cache 的。</li>
+<li><strong><code>torch.cat</code> 每步新分配显存</strong>：这正是静态 cache 要改掉的（第五步）。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把 <code>kv_cache_matches</code> 的 T 改成 20。</li>
+<li>算 Llama-3-70B（80 层、8 个 KV 头、128 维）每 token 的 cache。</li>
+</ul><nav class="pager"><a href="29-why-fusion.html">← 第 29 章 · 为什么融合能变快：算力受限与访存受限</a><a href="31-read-inductor.html">第 31 章 · 读 Inductor 生成的代码：它已经帮你融了什么 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 31 章 · 读 Inductor 生成的代码：它已经帮你融了什么 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="31-inductor">第 31 章 · 读 Inductor 生成的代码：它已经帮你融了什么</h1><p><a class="btn" href="../animations/31-inductor-fusion.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：<code>torch.compile</code> 生成的代码在哪里看？一份生成代码长什么样，怎么读出"哪些算子被融成了一个 kernel、哪些交给了现成库"？什么时候 compile 已经够好、不必手写？<br />
+讲解日期：2026-11-15 · 上一章：<a href="../lessons/30-inference-mode.html">第 30 章 推理模式与 KV cache</a> · 下一章：<a href="../lessons/32-triton-model.html">第 32 章 Triton 编程模型</a><br />
+对应原文：AISPE ch14 §14.1.4「TorchInductor 后端代码生成」（<code>ai-infra/materials/ai-systems-performance-engineering/docs/chapters/ch14.md</code> 第 298–441 行，自动调优第 365 行）、§14.1.8「性能提示和调试生成的代码」（第 552–573 行）、「调试编译器阶段」（第 1029–1108 行）；本章生成代码片段是本机 torch 2.15.0（CPU 与 MPS）实测</p>
+<p>本章缩写：Inductor = TorchInductor，<code>torch.compile</code> 的代码生成后端；extern kernel（外部 kernel）= Inductor 不自己生成、直接调用的库函数（如 cuBLAS 的矩阵乘）；Metal = Apple 的 GPU 编程接口；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="2026-11-15">第一步：怎么拿到生成的代码（2026-11-15）</h3>
+<p>三种办法，从省事到详细：</p>
+<pre><code class="language-python"># ① 在代码里直接拿（返回值 + 生成的源码字符串）
+from torch._inductor.utils import run_and_get_code
+out, codes = run_and_get_code(torch.compile(f), x)
+print(codes[0])
+
+# ② 运行时打印
+#    TORCH_LOGS=output_code python train.py
+
+# ③ 把整个编译过程的中间产物落到磁盘（FX 图、ATen 图、生成代码）
+#    TORCH_COMPILE_DEBUG=1 python train.py      → torch_compile_debug/ 目录
+</code></pre>
+<p>生成的代码是一个 Python 模块：上面是几个 <strong>kernel 的定义</strong>（GPU 上是 Triton，CPU 上是 C++，Mac GPU 上是 Metal），最下面一个 <code>call(args)</code> 函数按顺序<strong>调用</strong>这些 kernel 和外部库。</p>
+<p><strong>一句话</strong>：<code>run_and_get_code</code> 直接拿，<code>TORCH_LOGS=output_code</code> 打印，<code>TORCH_COMPILE_DEBUG=1</code> 全落盘；生成代码 = 若干 kernel 定义 + 一个按顺序调用它们的 <code>call</code>。</p>
+<h3 id="kernel-2026-11-15">第二步：读 kernel 名字——融了哪些算子（2026-11-15）</h3>
+<p>Inductor 给每个融合 kernel 起名：<strong><code>&lt;后端&gt;_fused_&lt;被融进来的算子按字母排&gt;_&lt;编号&gt;</code></strong>。光看名字就知道融了什么。</p>
+<p><strong>实测 1</strong>：<code>softmax(x * 2, dim=-1)</code>，CPU：</p>
+<pre><code>cpp_fused__softmax_abs_all_amax_eq_mul_ne_sub_0
+</code></pre>
+<p><code>mul</code>（× 2）、<code>amax</code>（求最大值）、<code>sub</code>（减最大值）、<code>_softmax</code>（exp 和归一化）全在<strong>一个</strong> kernel 里。名字里的 <code>abs / all / eq / ne</code> 是 softmax 对"整行都是 −∞"这种特殊情况的检查。也就是说，第 13 章那套"先减最大值再 exp"，Inductor 自动写进了一个 kernel：一行数据读进来一次，在寄存器里求最大、求和、归一化，写出一次。</p>
+<p>C++ 的循环体里能看到 <code>at::vec::Vectorized&lt;float&gt;::loadu(..., 4)</code>：每次读 4 个 float，就是 CPU 的 SIMD（单指令多数据）向量化。</p>
+<p><strong>实测 2</strong>：<code>gelu(x @ w + b)</code>：</p>
+<pre><code class="language-python">extern_kernels.addmm(arg2_1, arg0_1, arg1_1, alpha=1, beta=1, out=buf0)   # 矩阵乘 + 偏置：交给库
+cpp_fused_gelu_0(buf1)                                                     # GELU：自己生成
+</code></pre>
+<p><strong>矩阵乘没有被"融"</strong>：Inductor 把它交给外部库（CPU 上是 mkldnn / OpenBLAS，GPU 上是 cuBLAS），偏置顺手用 <code>addmm</code> 一起算了；GELU 单独一个 kernel。这正好对应第 29 章：矩阵乘算力受限，库已经做到极致；GELU 访存受限，单独一趟读写。（GPU 上开 <code>mode="max-autotune"</code> 时，Inductor 会试着用自己生成的 Triton matmul 并把 GELU 融进它的"结尾"（epilogue，收尾阶段），快就用。）</p>
+<p><strong>实测 3</strong>：同一个 softmax 在 Mac GPU（MPS）上，生成的是 Metal 着色器：</p>
+<pre><code>kernel void generated_kernel_0(device float* out_ptr4, constant float* in_ptr0,
+                               uint2 thread_pos [[thread_position_in_grid]], ...)
+</code></pre>
+<p><strong>一句话</strong>：kernel 名字列出了被融进去的算子；矩阵乘通常走 <code>extern_kernels</code> 调库，逐元素和规约被融成 <code>*_fused_*</code>。</p>
+<h3 id="call-kernel2026-11-15">第三步：读 <code>call</code> 函数——数 kernel、看缓冲区（2026-11-15）</h3>
+<p><code>call</code> 是"执行顺序表"，读它回答三个问题：</p>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>看什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>一共几个 kernel？</td>
+<td>数 <code>_fused_</code> 调用和 <code>extern_kernels.</code> 调用的个数</td>
+</tr>
+<tr>
+<td>中间结果落显存了吗？</td>
+<td><code>buf0</code>、<code>buf1</code>……每个 <code>empty_strided(...)</code> 就是一块要写进显存的中间缓冲区；<strong>越少越好</strong></td>
+</tr>
+<tr>
+<td>有没有多余的拷贝？</td>
+<td><code>aten.clone</code>、<code>copy_</code>、<code>as_strided</code> 之类：可能是非连续输入（第 2 章）或原地修改引起的</td>
+</tr>
+</tbody>
+</table>
+<p>GPU 上的 Triton kernel 定义前通常带一个 <code>@triton.autotune</code> / <code>triton_heuristics</code> 装饰器，列出 Inductor 自动尝试的块大小（<code>XBLOCK</code>、<code>RBLOCK</code> 等），这就是它的自动调参（AISPE ch14 第 365 行）。</p>
+<p><strong>对照表</strong>（第 6 章的例子）：</p>
+<table>
+<thead>
+<tr>
+<th>eager</th>
+<th>编译后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sin → cos → mul → sum</code> 4 个 kernel、3 个中间张量</td>
+<td><code>cpp_fused_cos_mul_sin_sum_0</code> 1 个 kernel、0 个中间缓冲区</td>
+</tr>
+<tr>
+<td>20 次 <code>x * 1.01 + 0.01</code>：40 个 kernel</td>
+<td><code>cpp_fused_add_mul_0</code> 1 个（第 28 章）</td>
+</tr>
+<tr>
+<td><code>gelu(x + b) * s</code>：3 个 kernel、2 个中间张量</td>
+<td>1 个，实测快 2 倍（第 29 章）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>一句话</strong>：数 kernel 数和中间 buf 数，看有没有多余 clone；Triton kernel 前的 autotune 列表是自动调参。</p>
+<h3 id="compile-2026-11-15">第四步：compile 什么时候不够、该手写（2026-11-15）</h3>
+<p>Inductor 擅长：逐元素链、逐元素 + 规约（softmax、norm）、简单的矩阵乘收尾融合。</p>
+<p>它<strong>不擅长或做不到</strong>的典型情况：</p>
+<table>
+<thead>
+<tr>
+<th>情况</th>
+<th>为什么</th>
+<th>办法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>attention 这类"矩阵乘 + softmax + 矩阵乘"的整体融合</td>
+<td>需要分块 + 在线 softmax 的特殊算法</td>
+<td>用 SDPA / FlexAttention（第 14 章）</td>
+</tr>
+<tr>
+<td>输出巨大的 logits + cross-entropy</td>
+<td>要分块边算 logits 边算 loss，Inductor 不会自动改算法</td>
+<td>Liger-Kernel 的融合 CE，或手写</td>
+</tr>
+<tr>
+<td>量化权重的反量化 + 矩阵乘（int4）</td>
+<td>特殊的数据布局和位操作</td>
+<td>torchao 的现成 kernel，或手写 Triton</td>
+</tr>
+<tr>
+<td>断图把要融的东西切开了（第 6 章）</td>
+<td>两段之间无法融合</td>
+<td>先消除断图</td>
+</tr>
+<tr>
+<td>自定义的奇怪访存（gather 后再规约等）</td>
+<td>生成的代码可能不够好</td>
+<td>读代码、测带宽，不行就手写</td>
+</tr>
+</tbody>
+</table>
+<p>判断方法就是第 29 章第四步：<strong>生成代码里这个 kernel 的有效带宽离硬件上限还差多少</strong>。差得不多就别手写。</p>
+<p><strong>一句话</strong>：Inductor 擅长逐元素和规约的融合；改算法级的融合（attention、融合 CE、反量化 matmul）要用现成库或手写。</p>
+<h3 id="_2">动画演示：从算子图到生成代码</h3>
+<p><img alt="Inductor 融合" src="../animations/31-inductor-fusion.gif" /></p>
+<p>可交互版：<a href="../animations/31-inductor-fusion.html">animations/31-inductor-fusion.html</a>。下拉切换三个例子：softmax、gelu(x @ w + b)、sin → cos → mul → sum。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>左边是 eager 的算子链，每个方块一个 kernel；</li>
+<li>播放时 Inductor 把可融合的方块圈在一起（同色），矩阵乘标成"extern（调库）"；</li>
+<li>右边逐行出现生成代码的 <code>call</code> 函数：kernel 名就是本章实测到的名字。</li>
+</ol>
+<h2 id="_3">练习与作答记录</h2>
+<p><strong>题 1</strong>：生成代码里看到 kernel 名 <code>triton_poi_fused_add_mul_relu_0</code>。它融合了哪几个算子？（<code>poi</code> 是 pointwise：逐点，即逐元素）</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：<code>y = torch.relu(x @ w1) @ w2</code>，默认模式编译后，你预计 <code>call</code> 里有几个 <code>extern_kernels</code> 调用、几个 fused kernel？为什么？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：读生成代码发现 <code>call</code> 一开头有一个 <code>aten.clone</code> 把输入整个复制了一份。可能是什么原因？（提示：第 2 章）</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_4">口诀</h2>
+<blockquote>
+<p>拿代码：run_and_get_code、output_code、COMPILE_DEBUG；<br />
+名字里列着融进去的算子，矩阵乘走 extern 调库；<br />
+数 kernel、数 buf、找 clone；改算法级的融合，compile 不会，用库或手写。</p>
+</blockquote>
+<h2 id="_5">本章复习卡片</h2>
+<ul>
+<li>P112（拿生成代码的三种办法；生成代码 = kernel 定义 + <code>call</code>）</li>
+<li>P113（kernel 命名规则；实测 softmax → <code>cpp_fused__softmax_abs_all_amax_eq_mul_ne_sub_0</code>；<code>gelu(x@w+b)</code> → <code>extern_kernels.addmm</code> + <code>cpp_fused_gelu_0</code>）</li>
+<li>P114（读 <code>call</code>：kernel 数、buf 数、多余 clone；autotune 列表）</li>
+<li>P115（Inductor 做不到的融合：attention、融合 CE、反量化 matmul、断图处）</li>
+</ul>
+<h2 id="_6">附录 · 延伸阅读</h2>
+<h3 id="_7">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ AISPE 第 14 章</td>
+<td><code>ch14.md</code> 第 298–441 行（Inductor 代码生成与自动调优）、第 552–573 行（性能提示与调试生成代码）、第 1029–1108 行（调试各编译阶段）</td>
+<td>本章的完整版，含 Triton 生成代码示例</td>
+</tr>
+<tr>
+<td>官方文档「torch.compile Troubleshooting」</td>
+<td>"Inspecting generated code"、<code>TORCH_COMPILE_DEBUG</code>（〔在线〕）</td>
+<td>所有调试开关</td>
+</tr>
+<tr>
+<td>Jason Ansel 等「TorchInductor: a PyTorch-native Compiler」（Dev Discussions，2022）</td>
+<td>设计帖（〔在线〕dev-discuss.pytorch.org）</td>
+<td>调度与融合的设计思路</td>
+</tr>
+<tr>
+<td>Liger-Kernel</td>
+<td>README「Fused Linear Cross Entropy」（〔在线〕github.com/linkedin/Liger-Kernel）</td>
+<td>Inductor 做不到、手写才能做的融合</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">数学原理</h3>
+<p>本章没有新数学。读生成代码时用的是第 29 章的账：融合后的字节数 = 只读输入 + 只写输出；中间 buf 每多一个，就多一趟"写 + 读"。</p>
+<h3 id="_9">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>torch._inductor.utils.run_and_get_code(cf, *args)</code></td>
+<td>拿生成代码</td>
+</tr>
+<tr>
+<td><code>TORCH_LOGS=output_code</code> / <code>TORCH_COMPILE_DEBUG=1</code></td>
+<td>打印 / 落盘</td>
+</tr>
+<tr>
+<td><code>&lt;后端&gt;_fused_&lt;算子…&gt;_&lt;编号&gt;</code></td>
+<td>kernel 命名（后端：cpp / triton_poi / triton_red / triton_per 等）</td>
+</tr>
+<tr>
+<td><code>extern_kernels.mm / addmm / bmm</code></td>
+<td>交给库的矩阵乘</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_10">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch31_read_inductor.py</code>，配套测试 <code>tests/test_ch29_36.py</code>；同一章的 notebook：<code>notebooks/ch31_read_inductor.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch31_read_inductor.py   # 一步一步打印  
+uv run pytest tests/test_ch29_36.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第二步 softmax</td>
+<td>整条链一个 kernel</td>
+<td><code>summarize(generated(softmax2, x))</code></td>
+<td><code>cpp_fused__softmax_abs_all_amax_eq_mul_ne_sub_0</code>，向量化</td>
+</tr>
+<tr>
+<td>第二步 gelu(x@w+b)</td>
+<td>矩阵乘调库</td>
+<td><code>summarize(generated(mlp, ...))</code></td>
+<td>extern <code>addmm</code> + <code>cpp_fused_gelu_0</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">_, code = run_and_get_code(torch.compile(fn), *args)
+re.findall(r&quot;cpp_fused\w*&quot;, code[0])
+re.findall(r&quot;extern_kernels\.(\w+)&quot;, code[0])
+</code></pre>
+<p><strong>代码里才看得到的 1 件事</strong>：</p>
+<ol>
+<li><strong>同一个函数在 MPS 上生成 Metal、在 CUDA 上生成 Triton</strong>：名字前缀不同，规则相同。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li><code>generated(lambda x: torch.relu(x) * 2 + 1, torch.randn(64))</code>，看 kernel 名字。</li>
+<li>把 <code>mlp</code> 的 gelu 去掉，看还剩几个 kernel。</li>
+</ul><nav class="pager"><a href="30-inference-mode.html">← 第 30 章 · 推理模式与 KV cache：生成一个 token 要做什么</a><a href="32-triton-model.html">第 32 章 · Triton 编程模型：一个 program 处理一块数据 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

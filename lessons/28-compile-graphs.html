@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 28 章 · 训练里用 compile 与 CUDA Graphs：消灭碎活和启动开销 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="28-compile-cuda-graphs">第 28 章 · 训练里用 compile 与 CUDA Graphs：消灭碎活和启动开销</h1><p><a class="btn" href="../animations/28-cuda-graph.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：训练脚本里 <code>torch.compile</code> 套在哪一层、怎么避免重编译？什么叫 kernel 启动开销，CUDA Graph 怎么把它消掉？用 CUDA Graph 有哪些限制？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/27-memory.html">第 27 章 显存</a> · 下一章：<a href="../lessons/29-why-fusion.html">第 29 章 为什么融合</a><br />
+对应原文：AISPE ch13「区域编译」（<code>ch13.md</code> 第 903–920 行）、「编译模式及其权衡」（第 826–902 行）、「使用 CUDA 图减少内核启动开销」（第 1260–1376 行：捕获第 1266 行、重放第 1314 行、最佳实践第 1331 行）；AISPE ch14 §14.1.5 动态形状（<code>ch14.md</code> 第 442–537 行）、§14.2.2 最小化重编译（第 885 行）；本讲义 <a href="../lessons/06-compile-stack.html">第 6 章</a>；本章 CPU 计时是本机 torch 2.15.0 实测</p>
+<p>本章缩写：CUDA Graph = 把一串 GPU 操作录成一张图、之后一次性重放；launch（启动）= CPU 告诉 GPU 执行一个 kernel；cudagraph trees = PyTorch 管理多张 CUDA 图的机制；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="2026-11-14">第一步：碎活的代价——一次实测（2026-11-14）</h3>
+<p>第 5 章说过：每个算子都要 CPU 下一次单（kernel launch），单子本身有开销。算子很小时，下单比做菜还贵。</p>
+<p><strong>实测</strong>（本机 CPU）：一个函数做 20 次 <code>x = x * 1.01 + 0.01</code>（40 个小算子），x 只有 64 个数：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>每次调用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>eager</td>
+<td>30.7 µs</td>
+</tr>
+<tr>
+<td><code>torch.compile</code></td>
+<td>3.8 µs</td>
+</tr>
+</tbody>
+</table>
+<p>快了约 <strong>8 倍</strong>。生成的代码里只有一个 kernel：<code>cpp_fused_add_mul_0</code>——40 个算子融成一个。时间几乎全省在"每个算子过一遍 Python 和分派器"上（第 1、3 章）。</p>
+<p>GPU 上同理，而且多一层：即使 compile 把算子融合了，<strong>每个 kernel 还要 CPU 发一次 launch</strong>（每次几微秒）。模型小、batch 小、推理 decode 时，GPU 算一个 kernel 也就几微秒，launch 开销就成了大头。</p>
+<p><strong>一句话</strong>：小算子多时，时间花在"下单"而不是"做菜"；compile 融合减少单数，CUDA Graph 再把剩下的单一次下完。</p>
+<h3 id="compile-2026-11-14">第二步：训练里 compile 套在哪（2026-11-14）</h3>
+<table>
+<thead>
+<tr>
+<th>套法</th>
+<th>写法</th>
+<th>优点</th>
+<th>缺点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>整个模型</td>
+<td><code>model = torch.compile(model)</code></td>
+<td>优化空间最大</td>
+<td>编译慢（几十层要几分钟）；一处断图影响全局</td>
+</tr>
+<tr>
+<td><strong>区域编译</strong>（每个块）</td>
+<td><code>for b in model.layers: b.compile()</code></td>
+<td>相同的块<strong>只编一次</strong>、全部复用，冷启动快很多（AISPE ch13 第 903 行）</td>
+<td>块与块之间不能融合</td>
+</tr>
+<tr>
+<td>损失 + 优化器单独</td>
+<td><code>torch.compile(loss_fn)</code>、<code>opt.step</code> 也可编</td>
+<td>输出层 + CE 常是热点</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>大模型训练（torchtitan 等）常用<strong>区域编译</strong>：Transformer 的 32 层结构一样，编一次就行。和 FSDP2 一起用时，通常先 <code>fully_shard</code> 再对每层 <code>compile</code>（或顺序反过来，按框架文档）。</p>
+<p><strong>避免重编译</strong>（第 6 章第四步）：</p>
+<ul>
+<li>变长序列 → 补齐到几个固定长度（"分桶"：256、512、1024…），或者 <code>torch._dynamo.mark_dynamic(x, 1)</code> 告诉编译器第 1 维会变；</li>
+<li>不要在编译区里读会变的 Python 全局变量（比如当前 step 数），作为张量传进去；</li>
+<li>训练 / 评测切换（<code>train()</code> / <code>eval()</code>）会触发一次重编译，正常；</li>
+<li>用 <code>TORCH_LOGS=recompiles</code> 看原因。</li>
+</ul>
+<p><strong>一句话</strong>：大模型训练常按块区域编译，同构的块只编一次；变长输入补齐分桶或标 dynamic；用日志查重编译原因。</p>
+<h3 id="cuda-graph2026-11-14">第三步：CUDA Graph——录一次，重放很多次（2026-11-14）</h3>
+<p><strong>类比：点套餐。</strong> 原来每道菜单独点（每个 kernel 单独 launch）；CUDA Graph 是把一整套菜<strong>录成一个套餐号</strong>，以后只喊一次"3 号套餐"，后厨按录好的顺序一口气做完。</p>
+<pre><code class="language-python">g = torch.cuda.CUDAGraph()
+static_x = torch.randn(B, D, device=&quot;cuda&quot;)          # 输入要提前放在固定的位置
+# 热身几次（在旁路 stream 上），让分配器把要用的显存准备好
+with torch.cuda.graph(g):                            # 录：这里面的 kernel 只记录、不执行
+    static_y = model(static_x)
+
+for batch in data:
+    static_x.copy_(batch)                            # 新数据拷进同一个地址
+    g.replay()                                       # 一次 launch 跑完整张图
+    out = static_y.clone()                           # 结果也在固定地址，要留着就 clone
+</code></pre>
+<p>（AISPE ch13 第 1266–1330 行。）</p>
+<p><strong>限制</strong>（录下的是"在哪个地址、做哪些 kernel"，所以）：</p>
+<table>
+<thead>
+<tr>
+<th>限制</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>形状固定</td>
+<td>不同形状要不同的 kernel 参数，要么为每种形状录一张图</td>
+</tr>
+<tr>
+<td>输入输出地址固定</td>
+<td>只能 <code>copy_</code> 进去、从固定张量读出来</td>
+</tr>
+<tr>
+<td>图里不能有同步点、CPU 逻辑</td>
+<td><code>.item()</code>、<code>print</code>、Python <code>if</code> 都不会被录进去</td>
+</tr>
+<tr>
+<td>图里不能新分配显存</td>
+<td>热身时分配好，录的时候复用</td>
+</tr>
+<tr>
+<td>随机数要特殊处理</td>
+<td>PyTorch 已为 dropout 等做了支持</td>
+</tr>
+</tbody>
+</table>
+<p><strong>省事的办法</strong>：<code>torch.compile(model, mode="reduce-overhead")</code> 自动用 CUDA Graph（cudagraph trees，管理多张图和它们的显存），自动处理热身和静态缓冲。遇到不满足条件的地方会跳过不录（用日志看 "skipping cudagraphs" 原因）。</p>
+<p><strong>一句话</strong>：CUDA Graph 把一串 kernel 录成一个，之后一次 launch 重放；要求形状和地址固定、不能有同步和新分配；reduce-overhead 模式自动帮你做。</p>
+<h3 id="2026-11-14_1">第四步：什么时候值得（2026-11-14）</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>compile（融合）</th>
+<th>CUDA Graph</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>大模型、大 batch 训练</td>
+<td>✓ 融合逐元素运算、省显存流量</td>
+<td>收益小（每个 kernel 本来就够大）</td>
+</tr>
+<tr>
+<td>小模型、小 batch 训练</td>
+<td>✓</td>
+<td>✓ launch 开销占比大</td>
+</tr>
+<tr>
+<td>LLM 推理 decode（每步一个 token）</td>
+<td>✓</td>
+<td>✓✓ 最典型的场景（第 30 章）</td>
+</tr>
+<tr>
+<td>形状经常变</td>
+<td>要处理动态形状</td>
+<td>要为每种形状录图，或不用</td>
+</tr>
+</tbody>
+</table>
+<p>判断依据：profiler 时间线（第 24 章）上 GPU 那排是不是<strong>密密麻麻的细条、中间有空隙</strong>——是，就是 launch 受限，上 CUDA Graph。</p>
+<p><strong>一句话</strong>：大 batch 训练靠融合；小 batch 和推理 decode 再加 CUDA Graph；时间线上细条加空隙就是信号。</p>
+<h3 id="launch-vs">动画演示：逐个 launch vs 一次重放</h3>
+<p><img alt="CUDA Graph" src="../animations/28-cuda-graph.gif" /></p>
+<p>可交互版：<a href="../animations/28-cuda-graph.html">animations/28-cuda-graph.html</a>。三档：<strong>eager / compile（融合）/ compile + CUDA Graph</strong>；滑块调每个 kernel 的计算时间（小 batch ↔ 大 batch）。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>CPU 一排是 launch（每个淡色小块是一次下单），GPU 一排是 kernel；</li>
+<li>eager：40 个小 kernel，每个前面都要等 CPU 下单，GPU 上全是空隙；</li>
+<li>compile：融成几个 kernel，单数大减；</li>
+<li>CUDA Graph：CPU 只下一次单，GPU 上 kernel 首尾相接；</li>
+<li>把计算时间调大（大 batch），三种方式差距变小。</li>
+</ol>
+<h2 id="_2">练习与作答记录</h2>
+<p><strong>题 1</strong>：本章实测 eager 30.7 µs、compile 3.8 µs。省下来的 27 µs 主要花在哪？为什么说这不是"算得更快"？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：下面的推理循环想用 CUDA Graph，有哪两处不满足条件？</p>
+<pre><code class="language-python">for prompt in prompts:                       # 每个 prompt 长度不同
+    logits = model(prompt.cuda())
+    if logits.argmax().item() == eos: break
+</code></pre>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：一个 32 层 Transformer 整体 compile 要 6 分钟。换成每层区域编译，大约要多久？为什么？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_3">口诀</h2>
+<blockquote>
+<p>小算子多时下单比做菜贵，compile 融合减单数；<br />
+大模型按块区域编，同构只编一次，变长输入补齐分桶；<br />
+CUDA Graph 录一次套餐号，形状地址要固定、不能同步和新分配；reduce-overhead 自动录；细条加空隙就该上。</p>
+</blockquote>
+<h2 id="_4">本章复习卡片</h2>
+<ul>
+<li>P99（实测 40 个小算子：eager 30.7 µs vs compile 3.8 µs，融成 <code>cpp_fused_add_mul_0</code>）</li>
+<li>P100（区域编译：同构块编一次复用；避免重编译：补齐分桶、mark_dynamic、别读会变的全局变量）</li>
+<li>P101（CUDA Graph：capture / replay、static 输入输出、五条限制；mode="reduce-overhead"）</li>
+<li>P102（何时用：小 batch、推理 decode；时间线上细条 + 空隙）</li>
+</ul>
+<h2 id="_5">附录 · 延伸阅读</h2>
+<h3 id="_6">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ AISPE 第 13 章</td>
+<td><code>ch13.md</code> 第 1260–1376 行（CUDA 图捕获、重放、最佳实践）、第 903–920 行（区域编译）</td>
+<td>本章第二、三步</td>
+</tr>
+<tr>
+<td>★ AISPE 第 14 章</td>
+<td><code>ch14.md</code> 第 442–537 行（动态形状）、第 885–929 行（最小化重编译）</td>
+<td>训练中的重编译处理</td>
+</tr>
+<tr>
+<td>官方教程「Reducing torch.compile cold start compilation time with regional compilation」</td>
+<td>全文（〔在线〕）</td>
+<td>区域编译用法</td>
+</tr>
+<tr>
+<td>官方文档 CUDA Graphs（CUDA semantics 一节）</td>
+<td>"CUDA Graphs"（〔在线〕）</td>
+<td>手动 capture 的完整规则</td>
+</tr>
+<tr>
+<td>CUDA 讲义 第 26 章</td>
+<td>CUDA Graphs 与 PDL</td>
+<td>底层机制</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_7">数学原理</h3>
+<ul>
+<li><strong>launch 受限的条件</strong>：每个 kernel 的 GPU 时间 <span class="arithmatex">\(t_k\)</span> 小于 CPU 下单时间 <span class="arithmatex">\(t_l\)</span> 时，GPU 利用率约 <span class="arithmatex">\(t_k / t_l\)</span>；CUDA Graph 把 n 次下单变成 1 次，总时间从约 <span class="arithmatex">\(n \cdot \max(t_k, t_l)\)</span> 降到约 <span class="arithmatex">\(t_l + n \cdot t_k\)</span>。</li>
+</ul>
+<h3 id="_8">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>block.compile()</code> / <code>torch.compile(block)</code></td>
+<td>区域编译</td>
+</tr>
+<tr>
+<td><code>torch._dynamo.mark_dynamic(x, dim)</code></td>
+<td>标记会变的维度</td>
+</tr>
+<tr>
+<td><code>torch.cuda.CUDAGraph()</code> + <code>with torch.cuda.graph(g):</code> + <code>g.replay()</code></td>
+<td>手动 CUDA Graph</td>
+</tr>
+<tr>
+<td><code>torch.compile(m, mode="reduce-overhead")</code></td>
+<td>自动 CUDA Graph</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch28_compile_graphs.py</code>，配套测试 <code>tests/test_ch23_28.py</code>；同一章的 notebook：<code>notebooks/ch28_compile_graphs.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑（CUDA Graph 部分需要 GPU，标 [GPU]）：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch28_compile_graphs.py   # 一步一步打印  
+uv run pytest tests/test_ch23_28.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 40 个小算子</td>
+<td>eager vs compile</td>
+<td><code>per_call_us(...)</code></td>
+<td>约 29–31 µs vs 约 4 µs</td>
+</tr>
+<tr>
+<td>第一步 融合</td>
+<td>—</td>
+<td><code>fused_names(many_small_ops, x)</code></td>
+<td><code>cpp_fused_add_mul_0</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">for _ in range(20): x = x * 1.01 + 0.01   # 40 个小算子
+cf = torch.compile(many_small_ops)
+</code></pre>
+<p><strong>代码里才看得到的 1 件事</strong>：</p>
+<ol>
+<li><strong>计时数字每次略有不同</strong>：测试只核对 compile 至少快一倍。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把循环次数改成 200，看 eager 和 compile 各怎么涨。</li>
+<li>把 x 改成 100 万个数，看差距是不是变小（计算占比变大）。</li>
+</ul><nav class="pager"><a href="27-memory.html">← 第 27 章 · 显存：谁占了、怎么省、怎么看</a><a href="29-why-fusion.html">第 29 章 · 为什么融合能变快：算力受限与访存受限 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

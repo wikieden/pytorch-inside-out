@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 8 章 · Dataset 与 DataLoader：给 GPU 备菜的流水线 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="8-dataset-dataloader-gpu">第 8 章 · Dataset 与 DataLoader：给 GPU 备菜的流水线</h1><p><a class="btn" href="../animations/08-dataloader-workers.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：<code>Dataset</code> 和 <code>DataLoader</code> 各管什么？一个 batch 是怎么拼出来的？<code>num_workers</code>、<code>pin_memory</code>、<code>collate_fn</code> 是干嘛的？为什么数据加载慢会让 GPU 闲着？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/07-nn-module.html">第 7 章 nn.Module</a> · 下一章：<a href="../lessons/09-training-loop.html">第 9 章 训练循环</a><br />
+对应原文：00-overview.md §3、§6.2 第一行；官方文档 <code>torch.utils.data</code>（〔在线〕）；AISPE ch13「优化数据输入流水线」（<code>ch13.md</code> 第 1552–1561 行）；本章输出在本机 torch 2.15.0 上跑过（代码见本章末尾"代码对照"）</p>
+<p>本章缩写：I/O = Input/Output（输入 / 输出，这里指读硬盘）；batch（批）= 一次喂给模型的一组样本；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="dataset-i-dataloader-2026-11-14">第一步：Dataset 管"第 i 个是什么"，DataLoader 管"怎么一批批送"（2026-11-14）</h3>
+<p><strong>类比：餐厅备菜。</strong> Dataset 是<strong>菜谱 + 仓库</strong>：你说"第 7 号菜"，它就把这一份做出来（读图片、解码、增强）。DataLoader 是<strong>传菜员</strong>：决定按什么顺序拿、几份装一盘、找几个帮手同时备菜、盘子送到哪。</p>
+<p>自己写 Dataset 只要两个方法：</p>
+<pre><code class="language-python">class MyDataset(Dataset):
+    def __init__(self, files): self.files = files
+    def __len__(self): return len(self.files)          # 一共几份
+    def __getitem__(self, i):                          # 第 i 份是什么
+        x = load_and_augment(self.files[i])
+        return x, label_of(self.files[i])
+</code></pre>
+<p>现成的 <code>TensorDataset(X, y)</code> 直接把两个张量按第 0 维配对。</p>
+<p><strong>一个 batch 怎么拼</strong>（实测）：</p>
+<pre><code class="language-python">ds = TensorDataset(torch.randn(10, 4), torch.arange(10))
+for xb, yb in DataLoader(ds, batch_size=4):
+    print(tuple(xb.shape), yb.tolist())
+# (4, 4) [0, 1, 2, 3]
+# (4, 4) [4, 5, 6, 7]
+# (2, 4) [8, 9]          ← 最后一批不满
+</code></pre>
+<p>10 个样本、每批 4 个 → 3 批，最后一批只有 2 个。<code>drop_last=True</code> 会扔掉不满的那批（<code>len(loader)</code> 变成 2）。训练时常扔掉，因为 batch 大小变了会影响 BatchNorm 和第 6 章的编译（形状变 → 重编译）。</p>
+<p>DataLoader 内部三步：<strong>sampler（采样器）出下标</strong>（<code>shuffle=True</code> 时每个 epoch 打乱）→ <strong>对每个下标调 <code>ds[i]</code></strong> → <strong>collate（拼盘）把一组样本叠成一个张量</strong>（默认 <code>torch.stack</code>）。</p>
+<p><strong>一句话</strong>：Dataset 回答"第 i 个是什么"，DataLoader 负责打乱、分批、拼盘、并行备菜。</p>
+<h3 id="collate_fn2026-11-14">第二步：collate_fn——长短不一怎么拼（2026-11-14）</h3>
+<p>默认的拼盘是 <code>torch.stack</code>，要求每个样本<strong>形状一样</strong>。句子长短不一时就会报错，要自己写 <code>collate_fn</code>，最常见的是<strong>补齐</strong>（padding）：</p>
+<pre><code class="language-python">seqs = [torch.ones(2), torch.ones(5), torch.ones(3)]
+nn.utils.rnn.pad_sequence(seqs, batch_first=True)
+# tensor([[1., 1., 0., 0., 0.],
+#         [1., 1., 1., 1., 1.],
+#         [1., 1., 1., 0., 0.]])
+</code></pre>
+<p>补到最长的 5，空位填 0，同时通常再返回一个 mask（哪些是真数据），让 attention 和 loss 忽略补出来的位置（第 15 章 <code>ignore_index</code>）。</p>
+<p>LLM 预训练常用另一种做法：把很多文档首尾相连成一条长流，切成固定长度（比如 2048）的块，就没有补齐的浪费（CS336 a1 的数据加载就是这样）。</p>
+<p><strong>一句话</strong>：样本形状不一时自己写 collate_fn：补齐 + mask，或者拼接后切成定长。</p>
+<h3 id="num_workers2026-11-14">第三步：num_workers——找帮手并行备菜（2026-11-14）</h3>
+<p><code>num_workers=0</code>（默认）时，<strong>主进程自己</strong>读数据。读一批的时候，GPU 只能干等。</p>
+<p><strong>数字演示</strong>：读 + 增强一批要 40 ms（CPU），GPU 训练一步要 25 ms。</p>
+<table>
+<thead>
+<tr>
+<th>num_workers</th>
+<th>平均每批数据多久出来一份</th>
+<th>GPU 每步要等多久</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>40 ms，而且和训练串行</td>
+<td>40 ms（每步 65 ms，GPU 忙 38%）</td>
+</tr>
+<tr>
+<td>1</td>
+<td>40 ms（和训练并行了）</td>
+<td>40 − 25 = 15 ms</td>
+</tr>
+<tr>
+<td>2</td>
+<td>20 ms</td>
+<td>0（数据比训练快）</td>
+</tr>
+<tr>
+<td>4</td>
+<td>10 ms</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>规律：<span class="arithmatex">\(\text{num\_workers} \ge \frac{\text{读一批的时间}}{\text{训练一步的时间}}\)</span> 时，GPU 就不再等数据（这里 40 / 25 = 1.6，要 2 个以上）。</p>
+<p>几个配套参数：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>num_workers=k</code></td>
+<td>开 k 个子进程，各自调 <code>ds[i]</code>、拼 batch</td>
+</tr>
+<tr>
+<td><code>prefetch_factor</code>（默认 2）</td>
+<td>每个 worker 提前备好几批</td>
+</tr>
+<tr>
+<td><code>persistent_workers=True</code></td>
+<td>epoch 之间不关掉 worker，省掉每个 epoch 重新启动进程的时间</td>
+</tr>
+<tr>
+<td><code>pin_memory=True</code></td>
+<td>把 batch 放进锁页内存，配合 <code>.to("cuda", non_blocking=True)</code> 异步拷进显存（第 5 章第三步）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>worker 的坑</strong>：每个 worker 是独立进程，有自己的一份 Dataset 拷贝和随机数状态。用 numpy 随机增强时要在 <code>worker_init_fn</code> 里给每个 worker 设不同种子，否则几个 worker 可能产生一样的"随机"增强（PyTorch 自己的 <code>torch</code> 随机数已经按 worker 区分）。Dataset 里别打开大文件句柄后再 fork，最好在 <code>__getitem__</code> 里按需打开。</p>
+<p><strong>一句话</strong>：worker 数 ≥ 读一批 ÷ 训一步，GPU 就不等数据；再配 pin_memory + non_blocking 让拷贝也异步。</p>
+<h3 id="dataset-2026-11-14">第四步：两种 Dataset 和分布式采样（2026-11-14）</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>map-style（下标式）</th>
+<th>iterable-style（流式）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>写法</td>
+<td><code>__len__</code> + <code>__getitem__(i)</code></td>
+<td><code>__iter__</code>，一条条吐</td>
+</tr>
+<tr>
+<td>能随机打乱吗</td>
+<td>能（sampler 打乱下标）</td>
+<td>不能直接打乱，用缓冲区局部打乱</td>
+</tr>
+<tr>
+<td>适合</td>
+<td>数据能按编号随机读（图片文件夹、内存数组）</td>
+<td>数据太大或只能顺序读（网络流、超大 shard 文件）</td>
+</tr>
+</tbody>
+</table>
+<p>多卡训练时，每张卡要拿<strong>不同</strong>的样本：用 <code>DistributedSampler</code>，它按卡号把下标切开；每个 epoch 开始前调 <code>sampler.set_epoch(epoch)</code>，不然每个 epoch 打乱顺序都一样（第 16 章）。</p>
+<p><strong>一句话</strong>：能随机取用 map-style，只能顺序读用 iterable-style；多卡用 DistributedSampler 并每轮 set_epoch。</p>
+<h3 id="worker-gpu">动画演示：worker 数和 GPU 空等</h3>
+<p><img alt="DataLoader 的 worker 流水线" src="../animations/08-dataloader-workers.gif" /></p>
+<p>可交互版：<a href="../animations/08-dataloader-workers.html">animations/08-dataloader-workers.html</a>。滑块调 <code>num_workers</code>（0 / 1 / 2 / 4）和"读一批要多久"。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>上面几行是 worker，每个方块是"备好一批"；最下面一行是 GPU 训练；</li>
+<li>num_workers = 0 时备菜和训练排成一条线，GPU 有一半以上时间在等；</li>
+<li>加 worker 后备菜并行，GPU 方块逐渐首尾相接；右边显示 GPU 忙碌占比。</li>
+</ol>
+<h2 id="_2">练习与作答记录</h2>
+<p><strong>题 1</strong>：1000 个样本，<code>batch_size=64</code>，<code>drop_last=False</code> 时一个 epoch 有几批？最后一批几个？<code>drop_last=True</code> 时呢？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：读一批要 90 ms，训一步要 30 ms。<code>num_workers</code> 至少要几个 GPU 才不等数据？<code>num_workers=0</code> 时 GPU 忙碌占比大约多少？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：一批句子长度是 3、7、4，默认 DataLoader 为什么会报错？写 <code>collate_fn</code> 时除了补齐，还应该额外返回什么？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_3">口诀</h2>
+<blockquote>
+<p>Dataset 管第 i 个是什么，DataLoader 管打乱分批拼盘；<br />
+长短不齐自己拼，补齐加 mask；<br />
+worker 数 ≥ 读一批 ÷ 训一步，pin_memory 配 non_blocking；多卡 DistributedSampler，每轮 set_epoch。</p>
+</blockquote>
+<h2 id="_4">本章复习卡片</h2>
+<ul>
+<li>P24（DataLoader 三步：sampler 出下标 → <code>ds[i]</code> → collate 拼盘；10 个样本 batch 4 → [4, 4, 2]，drop_last）</li>
+<li>P25（num_workers ≥ 读一批时间 ÷ 训一步时间；prefetch_factor、persistent_workers、pin_memory）</li>
+<li>P26（变长样本：collate_fn 补齐 + mask；map-style vs iterable-style；DistributedSampler + set_epoch）</li>
+</ul>
+<h2 id="_5">附录 · 延伸阅读</h2>
+<h3 id="_6">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ 官方文档 <code>torch.utils.data</code></td>
+<td>"Dataset Types"、"Data Loading Order and Sampler"、"Multi-process data loading"、"Memory Pinning"（〔在线〕）</td>
+<td>本章四步的官方说明，含 worker 随机数细节</td>
+</tr>
+<tr>
+<td>AISPE 第 13 章</td>
+<td><code>ch13.md</code> 第 1552–1561 行「优化数据输入流水线」</td>
+<td>数据管道调优要点</td>
+</tr>
+<tr>
+<td>CS336 a1 handout</td>
+<td>数据加载一节（<code>get_batch</code>：从一长串 token 里随机切定长片段）</td>
+<td>第二步"拼接后切定长"的作业版</td>
+</tr>
+<tr>
+<td>《深入浅出 PyTorch》</td>
+<td>第 3 章 数据读入（〔在线〕）</td>
+<td>中文的 Dataset 写法范例</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_7">数学原理</h3>
+<ul>
+<li><strong>批数</strong>：<span class="arithmatex">\(\lceil N / B \rceil\)</span>（不扔）或 <span class="arithmatex">\(\lfloor N / B \rfloor\)</span>（<code>drop_last</code>）。</li>
+<li><strong>流水线吞吐</strong>：<span class="arithmatex">\(k\)</span> 个 worker、每批读取时间 <span class="arithmatex">\(t_d\)</span>，供给速度约 <span class="arithmatex">\(k / t_d\)</span> 批每秒；训练消耗 <span class="arithmatex">\(1 / t_s\)</span>。GPU 不等的条件 <span class="arithmatex">\(k / t_d \ge 1 / t_s\)</span>，即 <span class="arithmatex">\(k \ge t_d / t_s\)</span>。</li>
+</ul>
+<h3 id="_8">公式 / 代码清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Dataset.__len__</code> / <code>__getitem__</code></td>
+<td>map-style 数据集</td>
+</tr>
+<tr>
+<td><code>DataLoader(ds, batch_size, shuffle, drop_last, num_workers, pin_memory, persistent_workers, prefetch_factor, collate_fn)</code></td>
+<td>常用参数</td>
+</tr>
+<tr>
+<td><code>nn.utils.rnn.pad_sequence(seqs, batch_first=True)</code></td>
+<td>补齐</td>
+</tr>
+<tr>
+<td><code>DistributedSampler(ds)</code> + <code>sampler.set_epoch(e)</code></td>
+<td>多卡切分</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch08_dataloader.py</code>，配套测试 <code>tests/test_ch07_15.py</code>；同一章的 notebook：<code>notebooks/ch08_dataloader.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch08_dataloader.py   # 一步一步打印  
+uv run pytest tests/test_ch07_15.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 分批</td>
+<td>⌈10 / 4⌉ = 3</td>
+<td><code>batches()</code></td>
+<td>[4, 4, 2]；drop_last 时 2 批</td>
+</tr>
+<tr>
+<td>第二步 补齐</td>
+<td>补到最长</td>
+<td><code>pad_demo()</code></td>
+<td>长度 2、5、3 → 5</td>
+</tr>
+<tr>
+<td>第三步 worker 数</td>
+<td>k ≥ t_d / t_s</td>
+<td><code>gpu_busy(40, 25, k)</code></td>
+<td>0 个 38%，2 个 100%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">ds = TensorDataset(torch.randn(10, 4), torch.arange(10))
+DataLoader(ds, batch_size=4, drop_last=False)    # 4, 4, 2
+nn.utils.rnn.pad_sequence(seqs, batch_first=True)
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong><code>gpu_busy</code> 是理想模型</strong>：只算稳定后的吞吐，不算启动 worker 的开销和第一批的等待。</li>
+<li><strong><code>pad_sequence</code> 默认补 0</strong>：要补别的值用 <code>padding_value=</code>。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li><code>gpu_busy(60, 25, k)</code> 对 k = 1、2、3 各算一遍，看要几个 worker。</li>
+<li>给 <code>pad_demo</code> 加 <code>padding_value=-1</code>。</li>
+</ul><nav class="pager"><a href="07-nn-module.html">← 第 7 章 · nn.Module：一棵自动登记参数的积木树</a><a href="09-training-loop.html">第 9 章 · 训练循环：五行主干 + 三件护具 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

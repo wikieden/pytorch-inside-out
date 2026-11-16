@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 36 章 · benchmark 与正确性：测准、对齐、再上线 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="36-benchmark">第 36 章 · benchmark 与正确性：测准、对齐、再上线</h1><p><a class="btn" href="../animations/36-bench.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：怎么测一个 kernel 的时间才算数？有效带宽怎么算、怎么判断离上限多远？一个新 kernel 要怎么测才敢替换原来的实现？<code>assert_close</code> 的容差是多少，低精度时怎么设？<br />
+讲解日期：2026-11-15 · 上一章：<a href="../lessons/35-quant-export.html">第 35 章 量化与导出</a> · 下一章：无（全书完）<br />
+对应原文：官方文档 <code>torch.utils.benchmark</code>、<code>torch.testing.assert_close</code>、Reproducibility（〔在线〕）；Triton <code>triton.testing.do_bench</code>（〔在线〕）；AISPE ch13「持续集成和性能基准测试」（<code>ch13.md</code> 第 1620–1691 行）；本讲义 <a href="../lessons/05-cuda-semantics.html">第 5 章</a>、<a href="../lessons/29-why-fusion.html">第 29 章</a>；本章计时和容差都是本机 torch 2.15.0 实测</p>
+<p>本章缩写：IQR = InterQuartile Range（四分位距：中间 50% 数据的范围，衡量波动）；rtol / atol = relative / absolute tolerance（相对 / 绝对 容差）；CI = Continuous Integration（持续集成）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="2026-11-15">第一步：测时间的四个坑（2026-11-15）</h3>
+<p><strong>实测</strong>：<code>torch.relu(x + y)</code>，<span class="arithmatex">\(2^{22}\)</span> 个 float32，本机 CPU，自己用 <code>perf_counter</code> 掐表 31 次：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>时间</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第 1 次</td>
+<td>2.43 ms</td>
+</tr>
+<tr>
+<td>之后 30 次的中位数</td>
+<td>0.42 ms</td>
+</tr>
+<tr>
+<td>最快 / 最慢</td>
+<td>0.37 / 0.65 ms</td>
+</tr>
+</tbody>
+</table>
+<p>再用 <code>torch.utils.benchmark.Timer(...).blocked_autorange()</code> 测：中位数 <strong>0.70 ms</strong>，旁边写着 "1 thread"。</p>
+<p>四个坑全在这里：</p>
+<table>
+<thead>
+<tr>
+<th>坑</th>
+<th>表现</th>
+<th>对策</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>没热身</strong></td>
+<td>第一次慢 6 倍（分配内存、加载 kernel、编译、缓存冷）</td>
+<td>先跑几次再计时</td>
+</tr>
+<tr>
+<td><strong>没同步</strong>（GPU）</td>
+<td>只测到下单时间（第 5 章，0.15 ms vs 10.2 ms）</td>
+<td>计时前后 <code>synchronize()</code>，或用 CUDA Event</td>
+</tr>
+<tr>
+<td><strong>只测一次</strong></td>
+<td>波动可达 ±50%</td>
+<td>测多次取<strong>中位数</strong>，看 IQR</td>
+</tr>
+<tr>
+<td><strong>线程数不一致</strong></td>
+<td><code>benchmark.Timer</code> 默认 <code>num_threads=1</code>，而直接跑用了 6 个线程，差 1.7 倍</td>
+<td>比较时明确设成一样（<code>Timer(..., num_threads=torch.get_num_threads())</code>）</td>
+</tr>
+</tbody>
+</table>
+<p>GPU 上最省事：<code>triton.testing.do_bench(fn)</code>，它自动热身、同步、清 L2 缓存（不然第二次读同一块数据会命中缓存、测得虚快）、取分位数。</p>
+<p><strong>一句话</strong>：热身、同步、多次取中位数、线程数一致；GPU 上用 do_bench（还会清缓存）。</p>
+<h3 id="2026-11-15_1">第二步：有效带宽——知道离上限多远（2026-11-15）</h3>
+<p>光有时间不知道好坏。第 29 章说访存受限的 kernel 用<strong>有效带宽</strong>衡量：</p>
+<div class="arithmatex">\[\text{有效带宽} = \frac{\text{必须读写的字节数}}{\text{实测时间}}\]</div>
+<p><strong>数字演示</strong>：上面的 <code>relu(x + y)</code> 必须读 x、y，写结果：<span class="arithmatex">\(3 \times 2^{22} \times 4\)</span> 字节 = 50.3 MB。</p>
+<table>
+<thead>
+<tr>
+<th>测法</th>
+<th>时间</th>
+<th>有效带宽</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>benchmark.Timer（1 线程）</td>
+<td>0.70 ms</td>
+<td>72 GB/s</td>
+</tr>
+<tr>
+<td>6 线程中位数</td>
+<td>0.42 ms</td>
+<td>120 GB/s</td>
+</tr>
+</tbody>
+</table>
+<p>和硬件上限比（本机内存带宽约 400+ GB/s，第 29 章 MPS 实测达到 471 GB/s），CPU 单线程只用了不到 20%。GPU 上的好 kernel 通常能到峰值带宽的 80–90%。</p>
+<p>注意分子是"<strong>必须</strong>读写的字节"，不是 kernel 实际读写的：如果 kernel 多读了一遍中间结果，有效带宽就低，正好暴露问题。算力受限的 kernel 改用"有效 FLOPS ÷ 峰值"（第 23 章 MFU 的单 kernel 版）。</p>
+<p><strong>一句话</strong>：有效带宽 = 必须读写字节 ÷ 时间；和硬件峰值比，GPU 好 kernel 能到 80–90%。</p>
+<h3 id="assert_close-2026-11-15">第三步：数值对齐——assert_close 和它的容差（2026-11-15）</h3>
+<p>新 kernel 的结果不可能和参考实现<strong>逐位</strong>相同（运算顺序不同，第 13 章浮点不满足结合律），所以比较要有容差：</p>
+<div class="arithmatex">\[|a - b| \le \text{atol} + \text{rtol} \times |b|\]</div>
+<p><code>torch.testing.assert_close</code> 按 dtype 自动选默认容差：</p>
+<table>
+<thead>
+<tr>
+<th>dtype</th>
+<th>rtol</th>
+<th>atol</th>
+<th>本机实测：在 1.0 上加 d</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>float32</td>
+<td>1.3e-6</td>
+<td>1e-5</td>
+<td>d = 1e-5 通过，d = 1e-3 失败</td>
+</tr>
+<tr>
+<td>bfloat16</td>
+<td>1.6e-2</td>
+<td>1e-5</td>
+<td>d = 0.016 通过，d = 0.03 失败</td>
+</tr>
+<tr>
+<td>float16</td>
+<td>1e-3</td>
+<td>1e-5</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>bf16 的默认容差是 float32 的一万倍，正好对应第 26 章 bf16 很粗（eps 0.0078）。</p>
+<p><strong>比较的正确姿势</strong>：</p>
+<ul>
+<li><strong>参考实现用高精度</strong>：低精度 kernel 的输出，和"同样输入、用 float32 / float64 算的参考"比，而不是和另一个低精度实现比；</li>
+<li><strong>看误差相对于"已知合理误差"</strong>：比如把参考实现也用 bf16 跑一遍，新 kernel 的误差不应明显大于它；</li>
+<li><strong>反向</strong>也要对：<code>gradcheck</code>（float64，第 4 章）或者和参考实现的梯度 <code>assert_close</code>。</li>
+</ul>
+<p><strong>一句话</strong>：assert_close 按 dtype 选容差（fp32 rtol 1.3e-6、bf16 1.6e-2）；参考实现用高精度，反向也要比。</p>
+<h3 id="2026-11-15_2">第四步：测试矩阵——别只测"顺手的那个形状"（2026-11-15）</h3>
+<p>kernel 的 bug 往往藏在边角。<strong>实测一个典型 bug</strong>：一个 kernel 假设输入是连续的，直接按 storage 顺序读：</p>
+<pre><code class="language-python">t = torch.arange(6.).view(2, 3).t()       # 转置后不连续（第 2 章）
+t.reshape(-1).tolist()                    # 正确：[0, 3, 1, 4, 2, 5]
+torch.as_strided(t, (6,), (1,)).tolist()  # 按 storage 读：[0, 1, 2, 3, 4, 5]  ← 错了
+</code></pre>
+<p>连续输入时两者一样，测试全过；换一个转置过的输入就错。所以测试要覆盖：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>至少测</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>形状</td>
+<td>正好整除 BLOCK 的、<strong>不整除</strong>的（第 32 章 mask）、很小的（1、长度 1 的维）、很大的</td>
+</tr>
+<tr>
+<td>dtype</td>
+<td>float32、bf16、fp16（kernel 支持的都测）</td>
+</tr>
+<tr>
+<td>内存布局</td>
+<td>连续、<strong>转置 / 切片后不连续</strong>、有 offset 的</td>
+</tr>
+<tr>
+<td>数值</td>
+<td>普通随机数、全 0、很大（溢出）、负数、−inf / NaN（softmax、norm 的边界）</td>
+</tr>
+<tr>
+<td>设备 / 编译</td>
+<td>eager、<code>torch.compile</code> 里调用（第 33 章 opcheck）</td>
+</tr>
+<tr>
+<td>反向</td>
+<td>gradcheck 或对参考梯度</td>
+</tr>
+</tbody>
+</table>
+<p>另外两件事：</p>
+<ul>
+<li><strong>确定性</strong>：<code>torch.use_deterministic_algorithms(True)</code> 让会用非确定算法（如第 12 章 GPU 上的 scatter_add）的地方报错，排查"每次跑结果都不一样"时用；</li>
+<li><strong>接进 CI</strong>：正确性测试 + 性能基准每次提交自动跑，性能掉了超过阈值就报警（AISPE ch13 第 1620–1691 行）。</li>
+</ul>
+<p><strong>一句话</strong>：测试矩阵覆盖形状（尤其不整除）、dtype、不连续布局、边界数值、compile、反向；排查不稳定开确定性模式；全部接进 CI。</p>
+<h3 id="kernel-2026-11-15">第五步：全书收束——一个融合 kernel 的完整生命周期（2026-11-15）</h3>
+<pre><code>① 发现：profiler 里某些算子占比大（第 24 章）
+② 判断：访存受限？compile 已经融了吗？离理论最快多远？（第 29、31 章）
+③ 写：Triton（第 32 章）或 C++ / CUDA（第 34 章），先写参考实现
+④ 注册：custom_op / triton_op + fake + autograd，opcheck（第 33 章）
+⑤ 验：测试矩阵 + assert_close + gradcheck（本章第三、四步）
+⑥ 测：do_bench，和 eager、compile 三方比，算有效带宽（本章第一、二步；第 34 章教训）
+⑦ 接：替换进模型，端到端看 token/s、MFU 和 loss 曲线（第 23 章）
+⑧ 守：接进 CI，防止回退
+</code></pre>
+<p><strong>一句话</strong>：发现 → 判断 → 写 → 注册 → 验 → 测 → 接 → 守；每一步本书都有对应的一章。</p>
+<h3 id="_2">动画演示：测量的分布与容差带</h3>
+<p><img alt="benchmark 与容差" src="../animations/36-bench.gif" /></p>
+<p>可交互版：<a href="../animations/36-bench.html">animations/36-bench.html</a>。两个场景：<strong>计时分布</strong>、<strong>容差带</strong>。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>计时分布：31 次测量画成点，第 1 次远在右边（没热身）；中位数线和 IQR 框；切到"1 线程"，整团点右移；</li>
+<li>容差带：参考值 1.0 周围画出 fp32 和 bf16 的容差带（atol + rtol × |b|），拖动"新 kernel 的输出"看何时通过、何时失败。</li>
+</ol>
+<h2 id="_3">练习与作答记录</h2>
+<p><strong>题 1</strong>：同事报告"我的 kernel 只要 0.02 ms"，代码是 <code>t = time.time(); y = kernel(x); print(time.time() - t)</code>，跑在 GPU 上，只测了一次。至少指出三个问题。</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：一个 LayerNorm kernel，输入输出都是 (4096, 4096) 的 bf16，测得 60 µs。有效带宽是多少？H100 带宽 3.35 TB/s，它达到了百分之几？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：你写的 bf16 kernel 和 float32 参考实现比，<code>assert_close</code> 失败，最大相对误差 0.02。你下一步怎么判断这是 bug 还是 bf16 本身的精度损失？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_4">口诀</h2>
+<blockquote>
+<p>测时间：先热身、要同步、多次取中位、线程数一致，GPU 用 do_bench；<br />
+有效带宽是必须字节除以时间，和峰值比才知好坏；<br />
+对数值：assert_close 按 dtype 定容差，参考用高精度、反向也要比；<br />
+测试矩阵别偷懒：不整除、不连续、边界值、compile 里也要跑；发现、判断、写、注册、验、测、接、守。</p>
+</blockquote>
+<h2 id="_5">本章复习卡片</h2>
+<ul>
+<li>P132（测时间四个坑：热身（首次 2.43 vs 中位 0.42 ms）、同步、多次取中位、benchmark.Timer 默认 1 线程（0.70 ms））</li>
+<li>P133（有效带宽 = 必须读写字节 ÷ 时间；relu(x+y) 50.3 MB / 0.70 ms = 72 GB/s）</li>
+<li>P134（assert_close 容差公式与默认值：fp32 rtol 1.3e-6、bf16 1.6e-2，atol 1e-5；参考用高精度）</li>
+<li>P135（测试矩阵；不连续输入 bug 实测 [0, 3, 1, 4, 2, 5] vs [0, 1, 2, 3, 4, 5]；确定性模式；融合 kernel 生命周期八步）</li>
+</ul>
+<h2 id="_6">附录 · 延伸阅读</h2>
+<h3 id="_7">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ 官方教程「PyTorch Benchmark」（<code>torch.utils.benchmark</code>）</td>
+<td>全文（〔在线〕）</td>
+<td>Timer、blocked_autorange、Compare 表格、线程设置</td>
+</tr>
+<tr>
+<td>★ <code>torch.testing.assert_close</code> 文档</td>
+<td>默认容差表（〔在线〕）</td>
+<td>各 dtype 的 rtol / atol</td>
+</tr>
+<tr>
+<td>Triton <code>triton.testing.do_bench</code> 与 <code>perf_report</code></td>
+<td>文档与教程里的 benchmark 部分（〔在线〕）</td>
+<td>GPU kernel 的标准测法（含清 L2）</td>
+</tr>
+<tr>
+<td>AISPE 第 13 章</td>
+<td><code>ch13.md</code> 第 1620–1691 行</td>
+<td>性能基准接进 CI</td>
+</tr>
+<tr>
+<td>官方文档 Reproducibility</td>
+<td>全文（〔在线〕）</td>
+<td>确定性算法与随机种子</td>
+</tr>
+<tr>
+<td>Liger-Kernel <code>test/</code> 与 <code>benchmark/</code> 目录</td>
+<td>〔在线〕</td>
+<td>真实 kernel 项目的测试矩阵和基准写法</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">数学原理</h3>
+<ul>
+<li><strong>容差判定</strong>：<span class="arithmatex">\(|a - b| \le \text{atol} + \text{rtol}\,|b|\)</span>，逐元素检查。</li>
+<li><strong>中位数 vs 平均</strong>：计时分布右偏（偶尔被系统打断），平均值被拉高，中位数更稳。</li>
+<li><strong>有效带宽</strong>：<span class="arithmatex">\(B_{eff} = \frac{\text{bytes}_{required}}{t}\)</span>；利用率 <span class="arithmatex">\(B_{eff} / B_{peak}\)</span>。</li>
+</ul>
+<h3 id="_9">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>benchmark.Timer(stmt, globals, num_threads).blocked_autorange()</code></td>
+<td>CPU / GPU 通用基准</td>
+</tr>
+<tr>
+<td><code>triton.testing.do_bench(fn)</code></td>
+<td>GPU kernel 基准</td>
+</tr>
+<tr>
+<td><code>torch.testing.assert_close(actual, expected, rtol=, atol=)</code></td>
+<td>数值比较</td>
+</tr>
+<tr>
+<td><code>torch.autograd.gradcheck</code></td>
+<td>反向数值检查</td>
+</tr>
+<tr>
+<td><code>torch.use_deterministic_algorithms(True)</code></td>
+<td>确定性模式</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_10">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch36_bench_correctness.py</code>，配套测试 <code>tests/test_ch29_36.py</code>；同一章的 notebook：<code>notebooks/ch36_bench_correctness.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch36_bench_correctness.py   # 一步一步打印  
+uv run pytest tests/test_ch29_36.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 四个坑</td>
+<td>热身、中位数、线程数</td>
+<td><code>naive_timings()</code>、<code>timer_median_ms()</code></td>
+<td>首次约 2 ms vs 中位约 0.42 ms；Timer 1 线程约 0.70 ms</td>
+</tr>
+<tr>
+<td>第二步 有效带宽</td>
+<td>50.3 MB ÷ 0.70 ms</td>
+<td><code>effective_gbs(...)</code></td>
+<td>72 GB/s</td>
+</tr>
+<tr>
+<td>第三步 容差</td>
+<td>atol + rtol·</td>
+<td>b</td>
+<td></td>
+</tr>
+<tr>
+<td>第四步 不连续 bug</td>
+<td>按 storage 读</td>
+<td><code>noncontiguous_bug()</code></td>
+<td>[0, 3, 1, 4, 2, 5] vs [0, 1, 2, 3, 4, 5]</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">benchmark.Timer(&quot;torch.relu(x + y)&quot;, globals=..., num_threads=threads).blocked_autorange()
+torch.testing.assert_close(actual, expected)      # 按 dtype 选默认容差
+torch.as_strided(t, (6,), (1,))                   # 假设连续的 kernel 就是这么读错的
+</code></pre>
+<p><strong>代码里才看得到的 1 件事</strong>：</p>
+<ol>
+<li><strong><code>benchmark.Timer</code> 默认 <code>num_threads=1</code></strong>：和直接跑（多线程）比较时要设成一样。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li><code>timer_median_ms(threads=2)</code>、<code>threads=4</code>，看线程数和时间的关系。</li>
+<li>在 <code>tolerance_checks</code> 里加 float16，看默认容差。</li>
+</ul><nav class="pager"><a href="35-quant-export.html">← 第 35 章 · 量化与导出：模型变小、脱离 Python 部署</a><span></span></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

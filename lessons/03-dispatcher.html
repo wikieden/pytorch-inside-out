@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 3 章 · 分派器：按标签一层层处理 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="3">第 3 章 · 分派器：按标签一层层处理</h1><p><a class="btn" href="../animations/03-dispatcher.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：第 1 章说"分派器看标签"，标签到底有哪些、按什么顺序处理？混合精度、自动求导、换设备为什么能互不干扰地叠在一起？"meta 设备"是什么，为什么一个 4 TB 的张量不占内存？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/02-tensor-stride.html">第 2 章 Tensor 内部</a> · 下一章：<a href="../lessons/04-autograd.html">第 4 章 Autograd</a><br />
+对应原文：00-overview.md §2.2；ezyang「PyTorch internals」dispatch 一节、「Let's talk about the PyTorch dispatcher」（〔在线〕blog.ezyang.com/2020/09/）；本章所有输出都在本机 torch 2.15.0 上跑过（代码见本章末尾"代码对照"）</p>
+<p>本章缩写：AD = Automatic Differentiation（自动 / 微分）；TLS = Thread-Local State（线程 / 局部 / 状态）；bf16 = brain floating point 16（Google Brain 提出的 16 位浮点）；XPU = Intel GPU 后端的名字（X 表示"任意"）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="2026-11-14">第一步：看一眼真实的标签（2026-11-14）</h3>
+<p>PyTorch 提供了一个内部函数，能直接看张量身上的标签（dispatch key，分派键）：</p>
+<pre><code class="language-python">x = torch.randn(2, 3)
+torch._C._dispatch_keys(x)
+# DispatchKeySet(CPU, ADInplaceOrView, AutogradCPU, AutocastCPU)
+</code></pre>
+<p>在 Mac 的 GPU（MPS）上：</p>
+<pre><code class="language-python">torch._C._dispatch_keys(torch.randn(2, device=&quot;mps&quot;))
+# DispatchKeySet(MPS, ADInplaceOrView, AutogradMPS, AutocastMPS)
+</code></pre>
+<p>四个标签各管一件事：</p>
+<table>
+<thead>
+<tr>
+<th>标签</th>
+<th>谁</th>
+<th>管什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AutocastCPU</code> / <code>AutocastMPS</code></td>
+<td>混合精度员</td>
+<td>开了 <code>torch.autocast</code> 时，把输入换成低精度（第 26 章）；没开就放行</td>
+</tr>
+<tr>
+<td><code>AutogradCPU</code> / <code>AutogradMPS</code></td>
+<td>记账员</td>
+<td>有输入要梯度就记一笔（第 4 章）；没有就放行</td>
+</tr>
+<tr>
+<td><code>ADInplaceOrView</code></td>
+<td>版本登记员</td>
+<td>原地修改和 view 时更新"版本号"，防止反向时用到被改过的数（第 4 章第四步）</td>
+</tr>
+<tr>
+<td><code>CPU</code> / <code>MPS</code> / <code>CUDA</code></td>
+<td>厨房</td>
+<td>真正计算</td>
+</tr>
+</tbody>
+</table>
+<p><strong>补正第 1 章</strong>：第 1 章为了好懂，说"不要梯度就没有'要记账'标签"。真实情况是：普通张量身上<strong>一直</strong>有 Autograd 标签，记账员每次都被叫到，他看一眼"有没有输入 <code>requires_grad=True</code>"，没有就直接放行，什么都不记。</p>
+<p><strong>一句话</strong>：每个张量带一组标签，一个标签对应一个"工种"；分派器按顺序把活交给各工种。</p>
+<h3 id="2026-11-14_1">第二步：顺序——从上往下，每层干完撕掉自己再往下传（2026-11-14）</h3>
+<p>标签有固定的优先级。简化后的梯子（从上往下处理）：</p>
+<pre><code>Autocast        混合精度员：要不要换成 bf16？
+   ↓
+Autograd        记账员：要不要记一笔？
+   ↓
+ADInplaceOrView 版本登记员
+   ↓
+（Python）      张量子类的 __torch_dispatch__，DTensor 就在这一层（第 20 章）
+   ↓
+CPU / CUDA / MPS / Meta   厨房
+</code></pre>
+<p>每一层做完自己的事，<strong>把自己的标签从"待处理"里去掉，再叫一次分派器</strong>（叫 redispatch，再分派），于是活自然落到下一层。</p>
+<p><strong>数字演示</strong>：在 autocast 里做 <code>x @ w</code>（<code>w</code> 要梯度）：</p>
+<pre><code class="language-python">x = torch.randn(2, 3); w = torch.randn(3, 4, requires_grad=True)
+with torch.autocast(&quot;cpu&quot;, dtype=torch.bfloat16):
+    y = x @ w
+y.dtype                       # torch.bfloat16
+y.grad_fn                     # &lt;MmBackward0&gt;
+y.grad_fn.next_functions      # ((None, 0), (&lt;ToCopyBackward0&gt;, 0))
+</code></pre>
+<p>一步步看：</p>
+<ol>
+<li><strong>Autocast 层</strong>：matmul 在"适合低精度"的名单里，于是把 <code>x</code>、<code>w</code> 转成 bf16。"转换"本身也是运算，也会经过记账员——所以账本上出现了 <code>ToCopyBackward0</code>（把 <code>w</code> 拷成 bf16 的那一步）；</li>
+<li><strong>Autograd 层</strong>：记下 <code>MmBackward0</code>，它的上游指向那个 <code>ToCopyBackward0</code>；</li>
+<li><strong>CPU 厨房</strong>：用 bf16 做乘法。</li>
+</ol>
+<p><code>next_functions</code> 里第一项是 <code>None</code>，因为 <code>x</code> 不要梯度，账本上不用为它往回走。</p>
+<p><strong>为什么要这样设计</strong>：混合精度、记账、换设备是三件<strong>互不相关</strong>的事。每件事只在自己那层写一次，就对<strong>所有</strong>算子生效。不然 2000 多个算子 × 每种组合，都得各写一遍。</p>
+<p><strong>一句话</strong>：标签有顺序：先混合精度，再记账，最后进厨房；每层做完撕掉自己的标签再往下传。</p>
+<h3 id="2026-11-14_2">第三步：每个算子一张"标签 → 实现"的表（2026-11-14）</h3>
+<p>分派器手里有一张大表：<strong>行是算子，列是标签，格子里是那一层用的函数</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>算子</th>
+<th>Autocast 列</th>
+<th>Autograd 列</th>
+<th>CPU 列</th>
+<th>CUDA 列</th>
+<th>Meta 列</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>aten::mm</code></td>
+<td>转 bf16</td>
+<td>记 MmBackward0</td>
+<td>CPU 矩阵乘</td>
+<td>cuBLAS</td>
+<td>只算输出形状</td>
+</tr>
+<tr>
+<td><code>aten::add</code></td>
+<td>不处理</td>
+<td>记 AddBackward0</td>
+<td>CPU 加法</td>
+<td>CUDA kernel</td>
+<td>只算形状</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>这张表的"行"在 PyTorch 源码 <code>aten/src/ATen/native/native_functions.yaml</code> 里声明（每个算子一项，写明有哪些后端实现）；Autograd 那列的反向公式写在 <code>tools/autograd/derivatives.yaml</code>（〔在线〕源码，本地未归档）。</li>
+<li><strong>加一个新后端</strong>（比如一种新芯片），只需要给它的标签那一列填函数，其他层自动复用。MPS、Intel 的 XPU 就是这么接进来的。</li>
+<li>第 33 章自己注册算子，就是往这张表里加一行。</li>
+</ul>
+<p><strong>一句话</strong>：分派器 = 一张"算子 × 标签"的大表；加功能加一列，加算子加一行。</p>
+<h3 id="meta-inference_mode2026-11-14">第四步：两个特别的标签——Meta 和 inference_mode（2026-11-14）</h3>
+<p><strong>Meta 设备</strong>：厨房只算"做出来的菜多大"，不真做。</p>
+<pre><code class="language-python">m = torch.empty(10**6, 10**6, device=&quot;meta&quot;)    # 名义上 10¹² 个 float32 = 4 TB
+(m @ m.T).shape                                 # torch.Size([1000000, 1000000])，瞬间返回
+torch._C._dispatch_keys(m)                      # DispatchKeySet(Meta, ADInplaceOrView, AutogradMeta)
+</code></pre>
+<p>用处：</p>
+<ul>
+<li><code>torch.compile</code>、<code>torch.export</code> 抓图时要先知道每一步的输出形状，又不想真算（第 6 章，那里叫 fake tensor，假张量，原理相同）；</li>
+<li>超大模型先在 meta 上建好结构，再按分片真正分配内存（第 19 章 FSDP2）：<code>with torch.device("meta"): model = BigModel()</code>。</li>
+</ul>
+<p><strong>inference_mode</strong>：在 <code>torch.inference_mode()</code> 里新建的张量<strong>根本没有 Autograd 标签</strong>：</p>
+<pre><code class="language-python">with torch.inference_mode():
+    z = torch.randn(2)
+torch._C._dispatch_keys(z)     # DispatchKeySet(CPU, AutocastCPU)
+</code></pre>
+<p>连"看一眼"都省了，所以比 <code>no_grad</code> 还快一点；代价是这种张量以后不能参与要求导的计算。</p>
+<p><strong>一句话</strong>：Meta = 只算形状不算数；inference_mode = 把记账员和版本登记员整个拿掉。</p>
+<h3 id="_2">动画演示：一次调用穿过标签梯子</h3>
+<p><img alt="分派器的标签梯子" src="../animations/03-dispatcher.gif" /></p>
+<p>可交互版：<a href="../animations/03-dispatcher.html">animations/03-dispatcher.html</a>。三个开关：<strong>autocast 开 / 关</strong>、<strong>w 要梯度 / 不要</strong>、<strong>设备 CPU / MPS / Meta</strong>。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>左边是标签梯子，<code>x @ w</code> 从上往下落，每到一层，这层的标签被划掉；</li>
+<li>每层旁边写这一层做了什么（"转 bf16"、"记 MmBackward0"、"放行"…）；</li>
+<li>右边账本记下每一笔，最下面是结果的 dtype 和 <code>grad_fn</code>；</li>
+<li>拨到 Meta 时，厨房只输出形状。</li>
+</ol>
+<h2 id="_3">练习与作答记录</h2>
+<p><strong>题 1</strong>：<code>torch._C._dispatch_keys(torch.randn(2, device="mps"))</code> 的输出是 <code>DispatchKeySet(MPS, ADInplaceOrView, AutogradMPS, AutocastMPS)</code>。按处理顺序（从先到后）排出这四个标签，并各用一句话说它管什么。</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：在 <code>torch.autocast("cpu", dtype=torch.bfloat16)</code> 里算 <code>x @ w</code>（只有 <code>w</code> 要梯度），账本上为什么会多出一笔 <code>ToCopyBackward0</code>？它是哪一层"造成"的、又是哪一层"记下"的？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：<code>torch.empty(10**6, 10**6, device="meta")</code> 名义上有多大（float32 每个数 4 字节）？实际占多少内存？举一个它有用的场景。</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_4">口诀</h2>
+<blockquote>
+<p>张量身上贴标签，分派器按梯子往下传：<br />
+先混合精度，再记账，再版本登记，最后进厨房；<br />
+每层干完撕标签；加功能加一列，加算子加一行；Meta 只算形状不算数。</p>
+</blockquote>
+<h2 id="_5">本章复习卡片</h2>
+<ul>
+<li>P06（标签梯子顺序：Autocast → Autograd → ADInplaceOrView →（Python）→ 后端；redispatch）</li>
+<li>P07（Autograd 标签一直在，不要梯度时记账员放行；inference_mode 张量没有 Autograd 标签）</li>
+<li>P08（Meta 设备：只推形状不分配内存；compile/export 抓图、大模型初始化用）</li>
+</ul>
+<h2 id="_6">附录 · 延伸阅读</h2>
+<h3 id="_7">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ ezyang「Let's talk about the PyTorch dispatcher」</td>
+<td>全文（〔在线〕blog.ezyang.com/2020/09/lets-talk-about-the-pytorch-dispatcher/）</td>
+<td>本章的原始讲法：dispatch key、优先级、redispatch、fallthrough</td>
+</tr>
+<tr>
+<td>★ ezyang「PyTorch internals」</td>
+<td>"dispatch" 两段（〔在线〕）</td>
+<td>设备 × 布局 × dtype 的"多重分派"视角</td>
+</tr>
+<tr>
+<td>官方教程「Extending dispatcher for a new backend in C++」</td>
+<td>全文（〔在线〕docs.pytorch.org/tutorials/advanced/extend_dispatcher.html）</td>
+<td>新后端怎么填自己那一列（PrivateUse1）</td>
+</tr>
+<tr>
+<td>官方文档 <code>torch.library</code></td>
+<td>概览（〔在线〕）</td>
+<td>第 33 章注册算子的预习</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">数学原理</h3>
+<p>本章没有新数学。可以把分派理解成函数组合：一次调用 = <span class="arithmatex">\(\text{Autocast} \circ \text{Autograd} \circ \text{ADInplaceOrView} \circ \text{Kernel}\)</span>，每一层要么做事再往下调，要么直接"穿透"（fallthrough）。</p>
+<h3 id="_9">公式 / 代码清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>torch._C._dispatch_keys(t)</code></td>
+<td>看张量身上的标签（内部 API，只用来学习）</td>
+</tr>
+<tr>
+<td><code>y.grad_fn.next_functions</code></td>
+<td>沿账本往回看上一步</td>
+</tr>
+<tr>
+<td><code>torch.empty(..., device="meta")</code> / <code>with torch.device("meta"):</code></td>
+<td>只算形状的张量 / 在 meta 上建模型</td>
+</tr>
+<tr>
+<td><code>torch.inference_mode()</code></td>
+<td>新张量不带 Autograd 标签</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_10">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch03_dispatcher.py</code>，配套测试 <code>tests/test_ch01_06.py</code>；同一章的 notebook：<code>notebooks/ch03_dispatcher.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch03_dispatcher.py   # 一步一步打印  
+uv run pytest tests/test_ch01_06.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 CPU 张量的标签</td>
+<td>四个工种</td>
+<td><code>keys(torch.randn(2))</code></td>
+<td>CPU、ADInplaceOrView、AutogradCPU、AutocastCPU</td>
+</tr>
+<tr>
+<td>第二步 autocast 里乘</td>
+<td>先转 bf16 再记账</td>
+<td><code>autocast_matmul()</code></td>
+<td>bf16、MmBackward0、上游 [None, ToCopyBackward0]</td>
+</tr>
+<tr>
+<td>第四步 Meta</td>
+<td>只算形状</td>
+<td><code>meta_matmul()</code></td>
+<td>名义 4 TB，形状 (10⁶, 10⁶)</td>
+</tr>
+<tr>
+<td>第四步 inference_mode</td>
+<td>没有 Autograd 标签</td>
+<td><code>keys(z)</code></td>
+<td>DispatchKeySet(CPU, AutocastCPU)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">torch._C._dispatch_keys(x)               # 内部 API：看标签
+with torch.autocast(&quot;cpu&quot;, dtype=torch.bfloat16):
+    y = x @ w
+y.grad_fn.next_functions                 # ((None, 0), (&lt;ToCopyBackward0&gt;, 0))
+m = torch.empty(10**6, 10**6, device=&quot;meta&quot;)
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong>普通张量一直带 Autograd 标签</strong>：不要梯度时记账员只是放行（第 1 章的简化说法在这里补正）。</li>
+<li><strong><code>_dispatch_keys</code> 是下划线开头的内部 API</strong>：只用来学习，不同版本输出顺序可能变。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>在 Mac 上看 <code>keys(torch.randn(2, device="mps"))</code>。</li>
+<li>把 <code>autocast_matmul</code> 里的 dtype 换成 <code>torch.float16</code>，看 CPU 上会不会报错。</li>
+</ul><nav class="pager"><a href="02-tensor-stride.html">← 第 2 章 · Tensor 内部：一块内存 + 一张&quot;怎么读&quot;的说明书</a><a href="04-autograd.html">第 4 章 · Autograd：账本怎么记、怎么倒着算 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

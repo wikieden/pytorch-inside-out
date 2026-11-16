@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 6 章 · eager 与 graph：torch.compile 里面的三道工序 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="6-eager-graphtorchcompile">第 6 章 · eager 与 graph：<code>torch.compile</code> 里面的三道工序</h1><p><a class="btn" href="../animations/06-compile-fusion.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：默认的"写一行跑一行"（eager）有什么代价？<code>torch.compile</code> 加一行就变快，它在背后做了哪几步？什么是"断图"（graph break）和"重编译"（recompile）？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/05-cuda-semantics.html">第 5 章 GPU 语义</a> · 下一章：<a href="../lessons/07-nn-module.html">第 7 章 nn.Module</a><br />
+对应原文：00-overview.md §2.5；AISPE ch14 §14.1「PyTorch 编译器深入剖析」（<code>ai-infra/materials/ai-systems-performance-engineering/docs/chapters/ch14.md</code> 第 19–673 行：14.1.1 Dynamo 第 40 行、14.1.2 AOT Autograd 第 209 行、14.1.4 Inductor 第 298 行）；官方 torch.compile Programming Model（〔在线〕）；本章输出都在本机 torch 2.15.0 CPU 上跑过（代码见本章末尾"代码对照"）</p>
+<p>本章缩写：FX = 原意 functional transformation（函数 / 变换），PyTorch 的图表示；AOT = Ahead-Of-Time（提前）；IR = Intermediate Representation（中间 / 表示）；JIT = Just-In-Time（即时，用到时才编译）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="eager-2026-11-14">第一步：eager 的代价——一步一张单、一步一趟显存（2026-11-14）</h3>
+<p>eager（急切模式）= 第 1 章那样，每行代码立刻走一遍"前端 → 分派器 → kernel"。它好调试，但有两笔开销：</p>
+<ol>
+<li><strong>Python 和分派器的开销</strong>：每个算子都要过一遍 Python 和分派器，大约几微秒。GPU 上一个小算子可能只要几微秒，下单比做菜还慢。</li>
+<li><strong>不会合并</strong>：<code>y = (x.sin().cos() * 2).sum(-1)</code> 在 eager 下是 4 个 kernel。每个 kernel 都从显存<strong>读一遍</strong>输入、<strong>写一遍</strong>输出：</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>kernel</th>
+<th>读</th>
+<th>写</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sin</td>
+<td>x</td>
+<td>t1</td>
+</tr>
+<tr>
+<td>cos</td>
+<td>t1</td>
+<td>t2</td>
+</tr>
+<tr>
+<td>mul</td>
+<td>t2</td>
+<td>t3</td>
+</tr>
+<tr>
+<td>sum</td>
+<td>t3</td>
+<td>y</td>
+</tr>
+</tbody>
+</table>
+<p>中间的 t1、t2、t3 只是"过路的"，写进显存再读出来纯属浪费。逐元素运算的时间几乎都花在读写显存上（第 29 章细讲），所以 4 个 kernel ≈ 4 倍的显存流量。</p>
+<p><strong>类比：做沙拉。</strong> eager 像每切一样菜都放回冰箱，下一步再拿出来；合并以后是拿出来一次，在案板上切完拌完再装盘。</p>
+<p><strong>一句话</strong>：eager 每个算子一张单、一趟显存；中间结果来回搬是主要浪费。</p>
+<h3 id="2026-11-14">第二步：三道工序——抓图、配反向、生成代码（2026-11-14）</h3>
+<p><code>torch.compile(f)</code> 第一次被调用时，按顺序做三件事：</p>
+<pre><code>你的 Python 函数
+ │ ① TorchDynamo：看着 Python 字节码执行，把张量运算一条条抄成一张图（FX Graph）
+ ▼
+FX 图 + guards（&quot;这张图在什么条件下能复用&quot;的检查清单）
+ │ ② AOTAutograd：提前把反向图也推出来，前向 + 反向一起交给下一步
+ ▼
+只含基础算子的图（ATen / Prims IR）
+ │ ③ TorchInductor：决定哪些算子合并成一个 kernel，生成代码
+ ▼
+GPU：Triton kernel（第 32 章）　CPU：C++ 代码（带 OpenMP 多线程和向量化）
+</code></pre>
+<p><strong>① Dynamo（抓图）</strong>：它不改你的代码，而是在 Python 执行字节码时"旁听"，遇到张量运算就记进图里，遇到普通 Python（算个下标、拼个字符串）就当场算掉。同时记下 <strong>guards（守卫）</strong>：输入的形状、dtype、设备……下次调用先查清单，全对就直接用编好的代码。AISPE ch14 第 40–208 行。</p>
+<p><strong>② AOTAutograd（配反向）</strong>：训练时还要反向。它在编译时就把第 4 章那张"账本"推出来，变成一张反向图，前向和反向一起优化（比如前向少存几个中间结果、反向重新算，第 27 章）。还会把原地修改改写成不原地的版本（functionalize，函数化），方便后面优化。AISPE ch14 第 209–246 行。</p>
+<p><strong>③ Inductor（生成代码）</strong>：把能合并的逐元素、规约运算<strong>融合</strong>进一个 kernel，再生成代码；矩阵乘法通常还是调现成的库（cuBLAS 等），开了 <code>mode="max-autotune"</code> 会再试几种 Triton 实现挑最快的。AISPE ch14 第 298–441 行。</p>
+<p><strong>实测（本机 CPU）</strong>：上面那个 4 个算子的函数，编译后生成的代码里只有<strong>一个</strong> kernel：</p>
+<pre><code class="language-python">from torch._inductor.utils import run_and_get_code
+_, code = run_and_get_code(torch.compile(lambda x: (x.sin().cos() * 2).sum(-1)), x)
+# 生成的代码里唯一的 kernel 名叫：cpp_fused_cos_mul_sin_sum_0
+</code></pre>
+<p>名字里 <code>fused</code>（融合）后面把四个算子都列上了。</p>
+<p><strong>一句话</strong>：compile = Dynamo 抓图 → AOTAutograd 配反向 → Inductor 融合生成代码；第一次调用编译，之后查 guards 直接复用。</p>
+<h3 id="dynamo-2026-11-14">第三步：断图——Dynamo 抄不下去的地方（2026-11-14）</h3>
+<p>有些代码 Dynamo 没法抄进一张图，只好<strong>把图切断</strong>：前半段编一张图，回到普通 Python 执行这一句，再从后面接着抄。这叫 <strong>graph break（断图）</strong>。</p>
+<p>最常见的原因：<strong>Python 的 <code>if</code> 依赖张量的值</strong>。</p>
+<pre><code class="language-python">def g(x):
+    y = x.sin()
+    if y.sum() &gt; 0:        # 要知道真假，必须先把数算出来（第 5 章的同步点）
+        y = y * 2
+    return y.cos()
+
+torch._dynamo.explain(g)(x)
+# graph_count = 2, graph_break_count = 1
+# 原因：generic_jump TensorVariable()   ← &quot;根据一个张量跳转&quot;
+</code></pre>
+<p>对比没有 <code>if</code> 的 <code>f</code>：<code>graph_count = 1, graph_break_count = 0</code>。</p>
+<p><strong>断图的代价</strong>：两段之间不能融合；中间回 Python 可能有同步；断得多了，几乎回到 eager。</p>
+<p><strong>常见的断图原因和改法</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>原因</th>
+<th>改法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>依赖张量值的 <code>if</code> / <code>while</code></td>
+<td><code>torch.where(cond, a, b)</code>（两边都算，再按条件选；第 12 章）</td>
+</tr>
+<tr>
+<td><code>print</code>、<code>.item()</code>、<code>.tolist()</code></td>
+<td>挪到编译函数外面，或只在调试时打开</td>
+</tr>
+<tr>
+<td>调用 Dynamo 不认识的第三方库 / C 扩展</td>
+<td>用 <code>torch.library</code> 注册成算子（第 33 章），或 <code>torch.compiler.disable</code> 标出来</td>
+</tr>
+<tr>
+<td>输出大小依赖数据（<code>nonzero</code>、布尔索引）</td>
+<td>改成固定形状的 mask 运算</td>
+</tr>
+</tbody>
+</table>
+<p>查断图：<code>torch._dynamo.explain(f)(x)</code>，或运行时设环境变量 <code>TORCH_LOGS=graph_breaks</code>；<code>torch.compile(f, fullgraph=True)</code> 让断图直接报错，强迫自己改干净。AISPE ch14 第 674–1108 行。</p>
+<p><strong>一句话</strong>：Dynamo 抄不下去就断图；最常见的是"看张量的值决定走哪条路"，用 <code>torch.where</code> 改写。</p>
+<h3 id="guards-2026-11-14">第四步：重编译——guards 不通过就再编一次（2026-11-14）</h3>
+<p>guards 是"这份编好的代码适用于什么输入"。输入一变，guards 不通过，就要<strong>重编译</strong>（recompile）。</p>
+<p><strong>实测</strong>：</p>
+<pre><code class="language-python">ch = torch.compile(lambda x: x * 2)
+ch(torch.randn(4)); ch(torch.randn(8)); ch(torch.randn(16))
+# TORCH_LOGS=recompiles 只打出一次：
+# Recompiling function ... triggered by: tensor 'x' size mismatch at index 0. expected 4, actual 8
+</code></pre>
+<p>为什么 16 没再编？第一次按"长度正好是 4"编（静态形状）；看到 8 时 PyTorch 发现长度在变，第二次就编成<strong>动态形状</strong>（长度是个符号 s0，任意值都能用），16 直接复用。</p>
+<p>重编译的常见来源：形状变（变长序列）、dtype 变、<code>model.train()</code> / <code>eval()</code> 切换、函数里读了一个会变的 Python 全局变量。编译很慢（几秒到几分钟），反复重编译会比 eager 还慢。默认重编译次数有上限，超过就放弃编译回到 eager。</p>
+<p><strong>三种模式</strong>（AISPE ch13 第 826 行起有对比表）：</p>
+<table>
+<thead>
+<tr>
+<th><code>mode=</code></th>
+<th>做什么</th>
+<th>适合</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"default"</code></td>
+<td>融合 + 生成代码</td>
+<td>一般训练</td>
+</tr>
+<tr>
+<td><code>"reduce-overhead"</code></td>
+<td>再套 CUDA Graph，一次下整张图的单（第 28、30 章）</td>
+<td>小 batch、推理 decode</td>
+</tr>
+<tr>
+<td><code>"max-autotune"</code></td>
+<td>对 matmul 等试多种实现挑最快，编译更久</td>
+<td>形状固定、长时间跑的任务</td>
+</tr>
+</tbody>
+</table>
+<p><strong>一句话</strong>：guards 不通过就重编译；形状在变的输入第二次会编成动态形状；<code>mode</code> 选省开销还是多调优。</p>
+<h3 id="eager-vs-compile">动画演示：eager vs compile 的显存往返</h3>
+<p><img alt="eager 与 compile 的 kernel 数和显存流量" src="../animations/06-compile-fusion.gif" /></p>
+<p>可交互版：<a href="../animations/06-compile-fusion.html">animations/06-compile-fusion.html</a>。开关：<strong>eager / compile</strong>、<strong>中间加一个 <code>if y.sum() &gt; 0</code>（断图）</strong>。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>上面是四个算子 sin → cos → ×2 → sum；下面是显存，每个箭头是一次读或写；</li>
+<li>eager：每个算子一个 kernel，中间结果写回显存再读出来；</li>
+<li>compile：Dynamo 抄成一张图，Inductor 合成一个 kernel，只读 x、只写 y；</li>
+<li>打开"断图"：图被切成两段，中间结果要落一次显存，kernel 数变成 2。</li>
+</ol>
+<h2 id="_2">练习与作答记录</h2>
+<p><strong>题 1</strong>：说出 <code>torch.compile</code> 的三道工序名字，每道一句话说它干什么。</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：<code>y = (x * 3 + 1).relu()</code> 在 eager 下几个 kernel？编译后 Inductor 最可能变成几个？为什么能变快？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：下面函数编译时会断图吗？为什么？怎么改成不断图的写法？</p>
+<pre><code class="language-python">def h(x):
+    if x.max() &gt; 1:
+        return x / x.max()
+    return x
+</code></pre>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_3">口诀</h2>
+<blockquote>
+<p>eager 一步一单一趟显存，compile 三道工序：Dynamo 抄图，AOTAutograd 配反向，Inductor 融合写代码；<br />
+看张量的值走分支就断图，用 where 改；guards 不过就重编，形状在变编成动态。</p>
+</blockquote>
+<h2 id="_4">本章复习卡片</h2>
+<ul>
+<li>P17（eager 的两笔开销：每算子的 Python / 分派开销 + 中间结果往返显存）</li>
+<li>P18（compile 三道工序：Dynamo → AOTAutograd → Inductor；guards；实测 sin/cos/mul/sum 融成 <code>cpp_fused_cos_mul_sin_sum_0</code>）</li>
+<li>P19（断图：依赖张量值的 if、print/item、未知库、数据相关形状；explain / fullgraph=True / torch.where）</li>
+<li>P20（重编译：guards 失败；第二次编成动态形状；三种 mode）</li>
+</ul>
+<h2 id="_5">附录 · 延伸阅读</h2>
+<h3 id="_6">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ AISPE 第 14 章</td>
+<td><code>ch14.md</code> 第 19–673 行（14.1 编译器剖析）、第 674–1108 行（14.2 断图）</td>
+<td>本章的完整版，带日志示例</td>
+</tr>
+<tr>
+<td>★ 官方 torch.compile Programming Model</td>
+<td>全文（〔在线〕docs.pytorch.org/docs/main/user_guide/torch_compiler/compile/programming_model.html）</td>
+<td>断图、重编译、编译时间的官方说明</td>
+</tr>
+<tr>
+<td>AISPE 第 13 章</td>
+<td><code>ch13.md</code> 第 617–958 行（compile 用法、模式权衡、区域编译）</td>
+<td>实际训练脚本里怎么开</td>
+</tr>
+<tr>
+<td>ezyang「Ways to use torch.compile」</td>
+<td>全文（〔在线〕blog.ezyang.com/2024/11/）</td>
+<td>何时值得用、何时不值得</td>
+</tr>
+<tr>
+<td>Ansel et al. 2024「PyTorch 2」（ASPLOS）</td>
+<td>§3 Dynamo、§5 Inductor（〔在线〕论文）</td>
+<td>设计原文</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_7">数学原理</h3>
+<ul>
+<li><strong>融合省下的显存流量</strong>：<span class="arithmatex">\(k\)</span> 个逐元素算子、每个读写 <span class="arithmatex">\(n\)</span> 个元素，eager 约 <span class="arithmatex">\(2kn\)</span> 次读写，融合后约 <span class="arithmatex">\(2n\)</span>，省到约 <span class="arithmatex">\(1/k\)</span>。</li>
+<li><strong>编译何时划算</strong>：编译耗时 <span class="arithmatex">\(C\)</span>，每步省 <span class="arithmatex">\(\Delta\)</span>，跑 <span class="arithmatex">\(N\)</span> 步；<span class="arithmatex">\(N \Delta &gt; C\)</span> 才赚。短实验、频繁重编译时可能亏。</li>
+</ul>
+<h3 id="_8">公式 / 代码清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>torch.compile(f, mode=..., fullgraph=..., dynamic=...)</code></td>
+<td>编译</td>
+</tr>
+<tr>
+<td><code>torch._dynamo.explain(f)(x)</code></td>
+<td>数图和断图原因</td>
+</tr>
+<tr>
+<td><code>TORCH_LOGS=graph_breaks,recompiles,output_code</code></td>
+<td>打印断图 / 重编译 / 生成代码</td>
+</tr>
+<tr>
+<td><code>torch._inductor.utils.run_and_get_code(cf, x)</code></td>
+<td>拿到生成的代码</td>
+</tr>
+<tr>
+<td><code>torch.compiler.disable</code></td>
+<td>这个函数别编</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch06_compile_stack.py</code>，配套测试 <code>tests/test_ch01_06.py</code>；同一章的 notebook：<code>notebooks/ch06_compile_stack.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch06_compile_stack.py   # 一步一步打印  
+uv run pytest tests/test_ch01_06.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第二步 融合</td>
+<td>四个算子一个 kernel</td>
+<td><code>fused_kernel_names(f, x)</code></td>
+<td><code>cpp_fused_cos_mul_sin_sum_0</code></td>
+</tr>
+<tr>
+<td>第三步 不断图</td>
+<td>—</td>
+<td><code>graph_breaks(f, x)</code></td>
+<td>(1, 0)</td>
+</tr>
+<tr>
+<td>第三步 断图</td>
+<td>依赖张量值的 if</td>
+<td><code>graph_breaks(g, x)</code></td>
+<td>(2, 1)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">from torch._inductor.utils import run_and_get_code
+_, code = run_and_get_code(torch.compile(f), x)
+re.findall(r&quot;cpp_fused\w*&quot;, code[0])
+torch._dynamo.explain(g)(x).graph_break_count   # 1
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong>先 <code>torch._dynamo.reset()</code></strong>：同一进程里编译过的函数会被缓存，不 reset 就拿不到新生成的代码。</li>
+<li><strong>CPU 上第一次编译要几秒</strong>：Inductor 要调本机 C++ 编译器。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把 <code>g</code> 里的 <code>if</code> 改成 <code>torch.where(y.sum() &gt; 0, y * 2, y)</code>，再看断图数。</li>
+<li>用 <code>TORCH_LOGS=recompiles uv run python ...</code> 依次喂长度 4、8、16 的输入，数重编译几次。</li>
+</ul><nav class="pager"><a href="05-cuda-semantics.html">← 第 5 章 · GPU 语义：下单就走、何时会等、显存怎么借</a><a href="07-nn-module.html">第 7 章 · nn.Module：一棵自动登记参数的积木树 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

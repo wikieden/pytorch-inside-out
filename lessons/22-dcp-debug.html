@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 22 章 · 分布式存档与排错：每卡存一片，卡死先查顺序 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="22">第 22 章 · 分布式存档与排错：每卡存一片，卡死先查顺序</h1><p><a class="btn" href="../animations/22-hang.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：模型切在几十张卡上，怎么存档、怎么在不同卡数下读回来？分布式训练最常见的"卡住不动"是怎么回事，怎么查？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/21-pp-cp-ep.html">第 21 章 PP / CP / EP</a> · 下一章：<a href="../lessons/23-perf-method.html">第 23 章 先算账</a><br />
+对应原文：官方文档 Distributed Checkpoint（DCP）、<code>torch.distributed.checkpoint.state_dict</code>（〔在线〕）；多机报告 §7.2 可靠性、§7.3 NCCL 与启动、§9「常见故障速查」（<code>distributed-pretraining/notes/03-engineering-report.md</code>）；Ultra-Scale Playbook §A1 Distributed Training Profiling（<code>ultrascale-playbook.md</code> 第 3624 行起）；本章 DCP 输出在本机 Gloo 2 进程上跑过</p>
+<p>本章缩写：DCP = Distributed CheckPoint（分布式 / 检查点）；hang = 卡死（程序不报错也不往前走）；OOM = Out Of Memory（显存不够）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="rank-0-2026-11-14">第一步：为什么不能"rank 0 存一份"（2026-11-14）</h3>
+<p>第 10 章的存法是"整理成一个 state_dict，存一个文件"。到了 FSDP / TP：</p>
+<ul>
+<li>参数是切开的 DTensor，每卡只有一片；要存一个完整文件，得先把所有片 all_gather 到 rank 0：70B 模型 + 优化器约 1 TB，rank 0 的内存根本放不下；</li>
+<li>而且只有 rank 0 在写硬盘，几十张卡干等，慢。</li>
+</ul>
+<p><strong>DCP（分布式存档）</strong>：<strong>每张卡各存自己那一片</strong>，同时写，再加一个记录"哪片在哪"的元数据文件。</p>
+<p><strong>实测</strong>（2 进程，FSDP2 + AdamW）：</p>
+<pre><code class="language-python">from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict
+import torch.distributed.checkpoint as dcp
+
+msd, osd = get_state_dict(model, opt)                      # 拿到分片形式的 state_dict
+dcp.save({&quot;model&quot;: msd, &quot;optim&quot;: osd}, checkpoint_id=path) # 所有 rank 都要调用
+# path 下出现：['.metadata', '__0_0.distcp', '__1_0.distcp']   ← 每 rank 一个文件 + 元数据
+</code></pre>
+<p>读回来（把参数清零后再加载，比较 <code>full_tensor()</code>，两个 rank 都输出 <code>restored equal True</code>）：</p>
+<pre><code class="language-python">msd, osd = get_state_dict(model, opt)
+state = {&quot;model&quot;: msd, &quot;optim&quot;: osd}
+dcp.load(state, checkpoint_id=path)                        # 原地填进 state
+set_state_dict(model, opt, model_state_dict=state[&quot;model&quot;], optim_state_dict=state[&quot;optim&quot;])
+</code></pre>
+<p><strong>一句话</strong>：DCP 让每卡同时存自己那片 + 一个元数据；save / load 所有 rank 都要调用。</p>
+<h3 id="2026-11-14">第二步：换卡数也能读——重新分片（2026-11-14）</h3>
+<p>元数据里记的是"每一片在<strong>完整张量</strong>里的哪个位置"。加载时，DCP 按<strong>当前</strong>的切分方式，去文件里读自己需要的那几块。所以：</p>
+<ul>
+<li>用 64 卡存的，可以用 32 卡加载（每卡读两片的范围）；</li>
+<li>用 FSDP 存的，可以换成 FSDP + TP 加载；</li>
+<li>想要单个文件（给推理用）：<code>torch.distributed.checkpoint.format_utils.dcp_to_torch_save</code> 转成普通的 <code>torch.save</code> 格式。</li>
+</ul>
+<p><strong>异步存档</strong>：<code>dcp.async_save(...)</code> 先把数据拷到 CPU 内存就返回，后台慢慢写硬盘，训练几乎不停。</p>
+<p><strong>一句话</strong>：元数据记的是"在完整张量里的位置"，所以换卡数、换并行方式都能读；async_save 后台写盘。</p>
+<h3 id="hang-bug2026-11-14">第三步：hang——最常见的分布式 bug（2026-11-14）</h3>
+<p><strong>现象</strong>：没有报错，GPU 利用率掉到 0（或 100% 空转），日志不再往前走。</p>
+<p><strong>最常见原因：各 rank 调用集合通信的次数或顺序不一样</strong>（第 17 章铁律）。比如：</p>
+<pre><code class="language-python">if loss.item() &gt; threshold:          # 每个 rank 的 loss 不同！
+    dist.all_reduce(stats)           # 有的 rank 进了这个 if，有的没进
+</code></pre>
+<p>rank 0 进了 if，在 all_reduce 里等其他人；rank 1 没进，跑去下一步的 all_reduce。两边都在等对方，永远等下去。</p>
+<p><strong>其他常见原因</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>现象</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>刚启动就卡住</td>
+<td>有的进程没起来、MASTER_ADDR / 端口不通、Mac 上没设 <code>GLOO_SOCKET_IFNAME=lo0</code>（第 16 章）</td>
+</tr>
+<tr>
+<td>跑一段时间后卡住</td>
+<td>条件分支导致通信次数不一致；某个 rank 数据读完了提前退出循环；某个 rank OOM 崩了，其他人在等它</td>
+</tr>
+<tr>
+<td>DDP 卡在反向</td>
+<td>有参数没参与 loss（第 18 章）</td>
+</tr>
+<tr>
+<td>只在 rank 0 存档时卡住</td>
+<td>存档函数里有集合通信（如 DCP、<code>full_tensor()</code>），只有 rank 0 调了</td>
+</tr>
+</tbody>
+</table>
+<p><strong>一句话</strong>：hang 多半是各 rank 的集合通信次数或顺序不一致；条件分支、提前退出、只在 rank 0 调用通信是三大来源。</p>
+<h3 id="2026-11-14_1">第四步：排错工具箱（2026-11-14）</h3>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>做什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>init_process_group(timeout=timedelta(minutes=10))</code></td>
+<td>等太久就报错退出，而不是永远卡着</td>
+</tr>
+<tr>
+<td><code>TORCH_DISTRIBUTED_DEBUG=DETAIL</code></td>
+<td>检查各 rank 的集合通信是否对得上，对不上直接报出是哪一个</td>
+</tr>
+<tr>
+<td><code>TORCH_NCCL_ASYNC_ERROR_HANDLING=1</code>（新版默认开）</td>
+<td>NCCL 出错或超时时让进程退出，方便重启</td>
+</tr>
+<tr>
+<td><code>TORCH_NCCL_TRACE_BUFFER_SIZE=2000</code>（Flight Recorder，飞行记录仪）</td>
+<td>记下最近的集合通信，卡死时导出，对比各 rank 停在第几次调用</td>
+</tr>
+<tr>
+<td><code>NCCL_DEBUG=INFO</code></td>
+<td>打印 NCCL 用了哪些网卡、NVLink 还是 IB、哪种算法；跨机慢多半在这里看出走错网卡</td>
+</tr>
+<tr>
+<td><code>py-spy dump --pid &lt;PID&gt;</code></td>
+<td>看卡住的进程此刻停在哪行 Python</td>
+</tr>
+<tr>
+<td>所有 rank 都打日志（带 rank 前缀）</td>
+<td>对比谁走到了哪一步</td>
+</tr>
+</tbody>
+</table>
+<p><strong>排查顺序</strong>：先让它超时报错（而不是无限等）→ 打开 <code>DETAIL</code> 看哪次通信对不上 → 用 py-spy 看每个 rank 停在哪行 → 回到代码找条件分支。</p>
+<p><strong>数值不一致</strong>也常见：各 rank 参数慢慢变得不一样（比如某个 buffer 没同步、随机数种子不同导致 dropout 不同步不要紧，但初始化不同就有问题）。定期检查：各 rank 对参数求和后 all_gather 比较。</p>
+<p><strong>一句话</strong>：先设超时，再开 DETAIL 对通信，py-spy 看停在哪，NCCL_DEBUG 看网络。</p>
+<h3 id="hang">动画演示：条件分支导致的 hang</h3>
+<p><img alt="分布式 hang" src="../animations/22-hang.gif" /></p>
+<p>可交互版：<a href="../animations/22-hang.html">animations/22-hang.html</a>。开关：<strong>分支依赖本 rank 的 loss / 分支条件先 all_reduce 统一</strong>。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>两条时间线是 rank 0 和 rank 1，每个方块是一次集合通信，编号是"第几次调用"；</li>
+<li>分支依赖本 rank 的 loss：rank 0 多调了一次 all_reduce，两边的编号错开，最后都停在红色"等待"状态；</li>
+<li>切到"先 all_reduce 统一条件"：所有 rank 用同一个判断结果，调用次数一致，顺利跑完。</li>
+</ol>
+<h2 id="_2">练习与作答记录</h2>
+<p><strong>题 1</strong>：64 卡 FSDP 训练，用 <code>dcp.save</code> 存档后，想在 16 卡上继续训。能直接加载吗？为什么？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：下面代码为什么会卡住？怎么改？</p>
+<pre><code class="language-python">if rank == 0:
+    full = model.layers[0].weight.full_tensor()     # full_tensor 内部要 all_gather
+    print(full.norm())
+</code></pre>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：训练跑了 3 小时后卡住，GPU 利用率 0%，没有报错。按什么顺序排查？列出你会用的两个环境变量。</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_3">口诀</h2>
+<blockquote>
+<p>分布式存档每卡存一片，元数据记位置，换卡数照样读；save、load 人人都要调；<br />
+卡死多半是通信次数顺序不一致：条件分支、提前退出、只让 rank 0 调；<br />
+先设超时，再开 DETAIL，py-spy 看停在哪，NCCL_DEBUG 看网络。</p>
+</blockquote>
+<h2 id="_4">本章复习卡片</h2>
+<ul>
+<li>P76（DCP：每 rank 一个 .distcp + .metadata；get_state_dict / dcp.save / dcp.load / set_state_dict；所有 rank 都调用）</li>
+<li>P77（重新分片加载、async_save、dcp_to_torch_save）</li>
+<li>P78（hang 的三大来源：条件分支、提前退出、只在 rank 0 调通信；full_tensor 也是通信）</li>
+<li>P79（排错工具：timeout、TORCH_DISTRIBUTED_DEBUG=DETAIL、Flight Recorder、NCCL_DEBUG=INFO、py-spy）</li>
+</ul>
+<h2 id="_5">附录 · 延伸阅读</h2>
+<h3 id="_6">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ 官方教程「Getting Started with Distributed Checkpoint」</td>
+<td>全文（〔在线〕）</td>
+<td>DCP 的 save / load / async_save</td>
+</tr>
+<tr>
+<td>★ 多机报告</td>
+<td><code>03-engineering-report.md</code> §7.2–§7.3 与"常见故障速查"</td>
+<td>真集群上的故障清单</td>
+</tr>
+<tr>
+<td>官方文档 Flight Recorder</td>
+<td>「Debugging hangs with Flight Recorder」（〔在线〕）</td>
+<td>卡死时导出通信记录、分析工具</td>
+</tr>
+<tr>
+<td>DeepSeek-V3 硬件复盘</td>
+<td>§6.1 可靠性（<code>distributed-pretraining/materials/text/deepseek-v3-hardware-insights-2505.09343.txt</code>）</td>
+<td>大集群上的故障率与应对</td>
+</tr>
+<tr>
+<td>Ultra-Scale Playbook §A1</td>
+<td><code>ultrascale-playbook.md</code> 第 3624 行起</td>
+<td>分布式 profiling 的时间线怎么看</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_7">数学原理</h3>
+<ul>
+<li><strong>存档大小</strong>（混合精度 AdamW，存 fp32 主参数 + m + v，第 10 章）≈ <span class="arithmatex">\(12\Psi\)</span> 字节，平均到每卡 <span class="arithmatex">\(12\Psi / N\)</span>。</li>
+<li><strong>写盘时间</strong> ≈ <span class="arithmatex">\(\frac{12\Psi}{N \times \text{每卡写带宽}}\)</span>：并行写是 DCP 快的原因。</li>
+</ul>
+<h3 id="_8">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get_state_dict(model, opt)</code> / <code>set_state_dict(...)</code></td>
+<td>取 / 填分片状态</td>
+</tr>
+<tr>
+<td><code>dcp.save(state, checkpoint_id=path)</code> / <code>dcp.load</code> / <code>dcp.async_save</code></td>
+<td>分布式存取</td>
+</tr>
+<tr>
+<td><code>init_process_group(backend, timeout=...)</code></td>
+<td>设超时</td>
+</tr>
+<tr>
+<td><code>TORCH_DISTRIBUTED_DEBUG=DETAIL</code>、<code>NCCL_DEBUG=INFO</code>、<code>TORCH_NCCL_TRACE_BUFFER_SIZE</code></td>
+<td>排错环境变量</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。分布式各章用 <code>dist_util.run</code> 在本机起 2 个 Gloo 进程（Mac 上自动设好 <code>GLOO_SOCKET_IFNAME=lo0</code>，第 16 章的坑），不需要 GPU。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch22_dcp_debug.py</code>，配套测试 <code>tests/test_ch16_22.py</code>；同一章的 notebook：<code>notebooks/ch22_dcp_debug.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch22_dcp_debug.py   # 一步一步打印  
+uv run pytest tests/test_ch16_22.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 DCP 存与读</td>
+<td>每 rank 一个文件</td>
+<td><code>dcp_roundtrip</code></td>
+<td>restored True；.metadata + 2 个 .distcp</td>
+</tr>
+<tr>
+<td>第三步 条件分支</td>
+<td>调用顺序不一致</td>
+<td><code>call_sequence(r, over, False)</code></td>
+<td>rank 0 多一个 stats2</td>
+</tr>
+<tr>
+<td>第三步 先统一条件</td>
+<td>一致</td>
+<td><code>call_sequence(r, over, True)</code></td>
+<td>两个 rank 相同</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">msd, osd = get_state_dict(m, opt)
+dcp.save({&quot;model&quot;: msd, &quot;optim&quot;: osd}, checkpoint_id=CKPT)   # 所有 rank 都调用
+dcp.load(state, checkpoint_id=CKPT)
+set_state_dict(m, opt, model_state_dict=..., optim_state_dict=...)
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong><code>call_sequence</code> 不真的通信</strong>：真去跑错的版本会 hang 住测试，所以只列出调用顺序来比对。</li>
+<li><strong>存档写到临时目录</strong>：路径在 <code>CKPT</code>，重复运行会覆盖。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把 <code>over</code> 里 rank 1 的第 3 步也改成 True，看错开的位置。</li>
+<li><code>run(dcp_roundtrip, world=4)</code> 看文件数。</li>
+</ul><nav class="pager"><a href="21-pp-cp-ep.html">← 第 21 章 · 流水线、上下文、专家并行，以及怎么组合</a><a href="23-perf-method.html">第 23 章 · 调优方法论：先算账，再测量，只改瓶颈 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

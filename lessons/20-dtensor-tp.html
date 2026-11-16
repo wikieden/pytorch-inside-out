@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 20 章 · DeviceMesh、DTensor 与张量并行 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="20-devicemeshdtensor">第 20 章 · DeviceMesh、DTensor 与张量并行</h1><p><a class="btn" href="../animations/20-tensor-parallel.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：一个张量"分布在多张卡上"怎么描述？DTensor 的 Shard / Replicate / Partial 是什么意思？张量并行（TP）怎么把一个 MLP 切到两张卡上，为什么"先按列切、再按行切"只要通信一次？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/19-fsdp2.html">第 19 章 FSDP2</a> · 下一章：<a href="../lessons/21-pp-cp-ep.html">第 21 章 PP / CP / EP 与组合</a><br />
+对应原文：Ultra-Scale Playbook §Tensor Parallelism（<code>ultrascale-playbook.md</code> 第 1032 行起：TP in a Transformer Block 第 1107 行、Sequence Parallelism 第 1214 行）；Megatron-LM 论文（〔在线〕arXiv:1909.08053）§3；官方文档 DTensor、<code>torch.distributed.tensor.parallel</code>（〔在线〕）；多机报告 §2.2；本章输出在本机 Gloo 2 进程上跑过</p>
+<p>本章缩写：TP = Tensor Parallelism（张量 / 并行）；SP = Sequence Parallelism（序列 / 并行）；DTensor = Distributed Tensor（分布式 / 张量）；mesh（网格）= 把卡排成多维阵列；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="devicemesh2026-11-14">第一步：DeviceMesh——把卡排成表格（2026-11-14）</h3>
+<p>多种并行一起用时，要说清"哪几张卡一组做什么"。<strong>DeviceMesh（设备网格）</strong> 把卡排成多维表格，每一维对应一种并行：</p>
+<pre><code class="language-python">mesh = init_device_mesh(&quot;cuda&quot;, (2, 4), mesh_dim_names=(&quot;dp&quot;, &quot;tp&quot;))
+#        tp=0  tp=1  tp=2  tp=3
+# dp=0:  卡0   卡1   卡2   卡3      ← 同一行 4 张卡做 TP（一台机器内，走 NVLink）
+# dp=1:  卡4   卡5   卡6   卡7      ← 同一列 2 张卡做 DP（跨机器）
+tp_mesh, dp_mesh = mesh[&quot;tp&quot;], mesh[&quot;dp&quot;]
+</code></pre>
+<p>每一维自动对应一个通信组：卡 0 在 TP 维和 1、2、3 通信，在 DP 维和 4 通信。第 19 章的 HSDP 就是一个 (机器数, 每机卡数) 的 2D mesh。</p>
+<p><strong>一句话</strong>：DeviceMesh 把卡排成表格，每一维一种并行、一个通信组。</p>
+<h3 id="dtensor-2026-11-14">第二步：DTensor 的三种摆放方式（2026-11-14）</h3>
+<p><strong>DTensor</strong> = 一个"逻辑上完整"的张量 + 在 mesh 每一维上<strong>怎么摆放</strong>（placement）：</p>
+<table>
+<thead>
+<tr>
+<th>placement</th>
+<th>意思</th>
+<th>每卡存什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Shard(d)</code></td>
+<td>沿第 d 维切开</td>
+<td>一段</td>
+</tr>
+<tr>
+<td><code>Replicate()</code></td>
+<td>每卡一份完整的</td>
+<td>全部</td>
+</tr>
+<tr>
+<td><code>Partial()</code></td>
+<td>每卡存一份"部分和"，加起来才是真值</td>
+<td>和全局同形状，但只是一部分贡献</td>
+</tr>
+</tbody>
+</table>
+<p><strong>实测</strong>（2 进程）：</p>
+<pre><code class="language-python">big = torch.arange(8.).reshape(4, 2)
+dt = distribute_tensor(big, mesh, [Shard(0)])
+# rank 0 本地：[[0, 1], [2, 3]]      rank 1 本地：[[4, 5], [6, 7]]
+dt.redistribute(mesh, [Replicate()])   # 每卡都拿到 (4, 2) 完整的（背后是 all_gather）
+s = (dt * 2).sum()
+s.placements          # (Partial(sum),)    ← 每卡只加了自己那段
+s.full_tensor()       # 56.0               ← 要真值时才 all_reduce
+</code></pre>
+<p>DTensor 的好处：<strong>你按单卡的写法写运算，它自己推出结果的摆放方式，必要时自动插通信</strong>。从 Shard 换到 Replicate 是 all_gather，Partial 换到 Replicate 是 all_reduce，Partial 换到 Shard 是 reduce_scatter（第 17 章的三个动词全对上了）。FSDP2 的参数就是 <code>Shard(0)</code> 的 DTensor（第 19 章）。</p>
+<p><strong>一句话</strong>：DTensor = 完整张量 + 摆放方式（Shard 切开、Replicate 复制、Partial 部分和）；换摆放方式就是集合通信。</p>
+<h3 id="2026-11-14">第三步：张量并行——一层矩阵切到几张卡上（2026-11-14）</h3>
+<p>FSDP 是"平时切、用时拼"，计算时每卡还是算整层。<strong>张量并行（TP）</strong> 是<strong>计算本身</strong>就分开：每张卡只算一层的一部分。</p>
+<p><strong>MLP 的切法</strong>（Megatron 方案，Playbook 第 1107 行起）：<span class="arithmatex">\(Y = \text{ReLU}(X W_1) W_2\)</span>。</p>
+<ol>
+<li><span class="arithmatex">\(W_1\)</span> <strong>按列切</strong>（Colwise）：卡 0 拿前一半列，卡 1 拿后一半列。每卡算出中间结果 <span class="arithmatex">\(H\)</span> 的一半列，<strong>不用通信</strong>（每列独立）。ReLU 逐元素，也各算各的。</li>
+<li><span class="arithmatex">\(W_2\)</span> <strong>按行切</strong>（Rowwise）：卡 0 拿前一半行（正好对上自己那一半 <span class="arithmatex">\(H\)</span>），卡 1 拿后一半行。每卡算出一个<strong>和最终结果同形状的部分和</strong>（Partial）。</li>
+<li><strong>all_reduce</strong> 一次，加起来就是 <span class="arithmatex">\(Y\)</span>。</li>
+</ol>
+<p><strong>数字演示</strong>：<span class="arithmatex">\(X = [1, 2]\)</span>，<span class="arithmatex">\(W_1\)</span>（2 × 4）<span class="arithmatex">\(= \begin{bmatrix}1&amp;0&amp;1&amp;0\\0&amp;1&amp;0&amp;1\end{bmatrix}\)</span>，<span class="arithmatex">\(W_2\)</span>（4 × 2）<span class="arithmatex">\(= \begin{bmatrix}1&amp;0\\0&amp;1\\1&amp;0\\0&amp;1\end{bmatrix}\)</span>。</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>卡 0</th>
+<th>卡 1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span class="arithmatex">\(W_1\)</span> 的列</td>
+<td>第 0–1 列</td>
+<td>第 2–3 列</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(H = \text{ReLU}(XW_1)\)</span> 的一半</td>
+<td>[1, 2]</td>
+<td>[1, 2]</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(W_2\)</span> 的行</td>
+<td>第 0–1 行</td>
+<td>第 2–3 行</td>
+</tr>
+<tr>
+<td>部分和</td>
+<td>[1, 2]</td>
+<td>[1, 2]</td>
+</tr>
+<tr>
+<td>all_reduce 后</td>
+<td>[2, 4]</td>
+<td>[2, 4]</td>
+</tr>
+</tbody>
+</table>
+<p>不切直接算：<span class="arithmatex">\(XW_1 = [1, 2, 1, 2]\)</span>，乘 <span class="arithmatex">\(W_2\)</span> 得 <span class="arithmatex">\([1 + 1, 2 + 2] = [2, 4]\)</span> ✓。</p>
+<p>PyTorch 写法：</p>
+<pre><code class="language-python">parallelize_module(mlp, tp_mesh, {&quot;w1&quot;: ColwiseParallel(), &quot;w2&quot;: RowwiseParallel()})
+</code></pre>
+<p><strong>实测</strong>（2 进程）：TP 结果 [[2.0, 4.0]] 和不切的一样；<code>w1.weight</code> 每卡本地 (2, 2)、placement 是 <code>Shard(dim=0)</code>，<code>w2.weight</code> 是 <code>Shard(dim=1)</code>。为什么"按列切"的 W1 显示 Shard(0)？因为 <code>nn.Linear</code> 存的是转置的权重 (out, in)（第 7 章），"切输出的列"在存储里就是切第 0 维。</p>
+<p>Attention 同理：Q、K、V 投影按列切（<strong>按头切</strong>，每卡几个头），输出投影按行切，一次 all_reduce。所以每个 Transformer 层前向 2 次 all_reduce、反向 2 次。</p>
+<p><strong>一句话</strong>：TP 把 W1 按列、W2 按行切，中间不通信，最后一次 all_reduce；attention 按头切；每层前向两次 all_reduce。</p>
+<h3 id="tp-sp2026-11-14">第四步：TP 的代价与 SP（2026-11-14）</h3>
+<p><strong>TP 通信多且在关键路径上</strong>：每层都要 all_reduce，而且下一步要等它的结果，很难藏。所以 TP <strong>只在一台机器内用</strong>（NVLink 带宽高），一般 TP ≤ 8。</p>
+<p><strong>TP 省什么</strong>：参数、梯度、优化器状态都按 TP 度切开；而且<strong>激活</strong>也部分切开了（MLP 中间的 <span class="arithmatex">\(H\)</span> 每卡只有一半）。但 LayerNorm、dropout 这些部分每卡还是存完整的激活。</p>
+<p><strong>SP（序列并行）</strong> 在 TP 的基础上，把 LayerNorm、dropout 部分的激活<strong>沿序列维</strong>切开：all_reduce 换成 reduce_scatter（进 norm 前，每卡拿一段 token）+ all_gather（进下一个 TP 区域前拼回来）。通信量不变（第 17 章：all_reduce = reduce_scatter + all_gather），激活显存又省了一截。PyTorch 里用 <code>SequenceParallel()</code> 给 norm 层，配合 Colwise / Rowwise 的 <code>input_layouts</code> / <code>output_layouts</code> 参数（Playbook 第 1214 行起）。</p>
+<p><strong>一句话</strong>：TP 每层通信、难藏，只在机内用；SP 把 norm 部分的激活按序列切，通信量不变、显存更省。</p>
+<h3 id="mlp">动画演示：MLP 的列切 + 行切</h3>
+<p><img alt="张量并行" src="../animations/20-tensor-parallel.gif" /></p>
+<p>可交互版：<a href="../animations/20-tensor-parallel.html">animations/20-tensor-parallel.html</a>。按钮切换"不切 / 2 卡 TP"。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>X 广播给两张卡；W1 按列分成两色，每卡算出 H 的一半；</li>
+<li>W2 按行分成两色，正好对上各自那一半 H；每卡得到一个部分和（Partial）；</li>
+<li>all_reduce 一次，两张卡都得到 [2, 4]；对照"不切"模式结果一样。</li>
+</ol>
+<h2 id="_2">练习与作答记录</h2>
+<p><strong>题 1</strong>：8 张卡排成 <code>(dp=2, tp=4)</code> 的 mesh。卡 5 在 TP 维和哪几张卡一组？在 DP 维和哪张卡一组？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：一个 DTensor 的 placement 是 <code>Partial()</code>，要变成 <code>Replicate()</code> 需要哪个集合操作？变成 <code>Shard(0)</code> 呢？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：为什么 MLP 要"W1 按列切、W2 按行切"，而不是两个都按列切？两个都按列切的话中间要多做什么通信？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_3">口诀</h2>
+<blockquote>
+<p>mesh 把卡排成表，每一维一种并行一个组；<br />
+DTensor 三种摆：Shard 切开、Replicate 复制、Partial 部分和，换摆法就是通信；<br />
+TP 先列后行，中间不传、最后一次 all_reduce；只在机内用，SP 再把 norm 按序列切。</p>
+</blockquote>
+<h2 id="_4">本章复习卡片</h2>
+<ul>
+<li>P68（DeviceMesh：(dp, tp) 表格，每维一个通信组）</li>
+<li>P69（DTensor 三种 placement；Shard→Replicate = all_gather，Partial→Replicate = all_reduce，Partial→Shard = reduce_scatter；实测 sum 得 Partial(sum)、full_tensor 56）</li>
+<li>P70（TP 的 MLP：W1 Colwise、W2 Rowwise、一次 all_reduce；数字例 [1, 2] → [2, 4]；nn.Linear 权重转置所以 Colwise 是 Shard(0)）</li>
+<li>P71（TP 只在机内；每层前向 2 次 all_reduce；SP = reduce_scatter + all_gather 切 norm 激活）</li>
+</ul>
+<h2 id="_5">附录 · 延伸阅读</h2>
+<h3 id="_6">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ Ultra-Scale Playbook §Tensor Parallelism</td>
+<td><code>ultrascale-playbook.md</code> 第 1032–1411 行</td>
+<td>列切 / 行切的图、Transformer 块的 TP、SP</td>
+</tr>
+<tr>
+<td>★ Shoeybi et al. 2019「Megatron-LM」</td>
+<td>§3 Model Parallel Transformers 与 Figure 3（〔在线〕arXiv:1909.08053）</td>
+<td>列切 + 行切的出处</td>
+</tr>
+<tr>
+<td>官方教程「Large Scale Transformer model training with Tensor Parallel」</td>
+<td>全文（〔在线〕）</td>
+<td>parallelize_module 的完整 Llama 例子</td>
+</tr>
+<tr>
+<td>官方文档 DTensor</td>
+<td>"DTensor Placement Types"、<code>redistribute</code>（〔在线〕）</td>
+<td>第二步</td>
+</tr>
+<tr>
+<td>Korthikanti et al. 2022「Reducing Activation Recomputation」</td>
+<td>§4 Sequence Parallelism（〔在线〕arXiv:2205.05198）</td>
+<td>SP 的出处</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_7">数学原理</h3>
+<ul>
+<li><strong>列切</strong>：<span class="arithmatex">\(XW = X[W^{(0)}, W^{(1)}] = [XW^{(0)}, XW^{(1)}]\)</span>，各卡独立。</li>
+<li><strong>行切</strong>：<span class="arithmatex">\(HW = [H^{(0)}, H^{(1)}]\begin{bmatrix}W^{(0)}\\W^{(1)}\end{bmatrix} = H^{(0)}W^{(0)} + H^{(1)}W^{(1)}\)</span>，各卡算一项，求和要 all_reduce。</li>
+<li>逐元素激活（ReLU、GELU）对列切的结果可以各自做，因为 <span class="arithmatex">\(f([a, b]) = [f(a), f(b)]\)</span>。</li>
+</ul>
+<h3 id="_8">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>init_device_mesh("cuda", (dp, tp), mesh_dim_names=("dp", "tp"))</code></td>
+<td>建 mesh</td>
+</tr>
+<tr>
+<td><code>distribute_tensor(t, mesh, [Shard(0)])</code> / <code>.redistribute(...)</code> / <code>.full_tensor()</code></td>
+<td>DTensor</td>
+</tr>
+<tr>
+<td><code>parallelize_module(m, tp_mesh, {"w1": ColwiseParallel(), "w2": RowwiseParallel()})</code></td>
+<td>TP</td>
+</tr>
+<tr>
+<td><code>SequenceParallel()</code></td>
+<td>norm 层的 SP</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。分布式各章用 <code>dist_util.run</code> 在本机起 2 个 Gloo 进程（Mac 上自动设好 <code>GLOO_SOCKET_IFNAME=lo0</code>，第 16 章的坑），不需要 GPU。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch20_dtensor_tp.py</code>，配套测试 <code>tests/test_ch16_22.py</code>；同一章的 notebook：<code>notebooks/ch20_dtensor_tp.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch20_dtensor_tp.py   # 一步一步打印  
+uv run pytest tests/test_ch16_22.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第二步 Shard(0)</td>
+<td>按行切</td>
+<td><code>dtensor_demo</code> 的 local</td>
+<td>[[0, 1], [2, 3]] / [[4, 5], [6, 7]]</td>
+</tr>
+<tr>
+<td>第二步 Partial</td>
+<td>sum 后部分和</td>
+<td>同上</td>
+<td>Partial(sum)，full_tensor 56</td>
+</tr>
+<tr>
+<td>第三步 TP</td>
+<td>W1 列切、W2 行切</td>
+<td><code>tp_demo</code></td>
+<td>TP 与不切都是 [[2, 4]]；W1 Shard(0)、W2 Shard(1)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">distribute_tensor(t, mesh, [Shard(0)])
+dt.redistribute(mesh, [Replicate()])            # 背后是 all_gather
+parallelize_module(m, mesh, {&quot;w1&quot;: ColwiseParallel(), &quot;w2&quot;: RowwiseParallel()})
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong>代码里的权重是讲义矩阵的转置</strong>：<code>nn.Linear</code> 存 (out, in)，所以"按列切"显示成 Shard(0)。</li>
+<li><strong><code>full_tensor()</code> 也是集合通信</strong>：两个 rank 都要调用（第 22 章的坑）。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把 <code>tp_demo</code> 的 x 改成 [[3, 1]]，先手算再跑。</li>
+<li><code>dt.redistribute(mesh, [Shard(1)])</code> 看每卡拿到什么。</li>
+</ul><nav class="pager"><a href="19-fsdp2.html">← 第 19 章 · FSDP2：每卡只存一片，用到时再拼</a><a href="21-pp-cp-ep.html">第 21 章 · 流水线、上下文、专家并行，以及怎么组合 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

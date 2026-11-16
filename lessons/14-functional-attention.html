@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 14 章 · nn.functional：归一化、激活与注意力 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="14-nnfunctional">第 14 章 · <code>nn.functional</code>：归一化、激活与注意力</h1><p><a class="btn" href="../animations/14-attention-memory.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：LayerNorm 和 RMSNorm 差在哪？ReLU、GELU、SiLU 长什么样，SwiGLU 怎么拼？为什么不自己写 attention，而用 <code>scaled_dot_product_attention</code>？FlexAttention 又解决什么问题？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/13-reduce-matmul.html">第 13 章 规约与矩阵乘</a> · 下一章：<a href="../lessons/15-loss-optimizer.html">第 15 章 损失与优化器</a><br />
+对应原文：00-overview.md §4.6；AISPE ch13「PyTorch 优化注意力机制」（<code>ch13.md</code> 第 959–996 行）；官方文档 <code>F.scaled_dot_product_attention</code>、FlexAttention 博客（〔在线〕pytorch.org/blog/flexattention）；CS336 a1 handout §3（RMSNorm、SwiGLU）；本章输出在本机 torch 2.15.0 上跑过</p>
+<p>本章缩写：LN = LayerNorm（层 / 归一化）；RMS = Root Mean Square（均方根）；ReLU = Rectified Linear Unit（整流 / 线性 / 单元）；GELU = Gaussian Error Linear Unit（高斯 / 误差 / 线性 / 单元）；SiLU = Sigmoid Linear Unit（S 形 / 线性 / 单元，也叫 Swish）；GLU = Gated Linear Unit（门控 / 线性 / 单元）；SDPA = Scaled Dot-Product Attention（缩放 / 点积 / 注意力）；FFN = Feed-Forward Network（前馈 / 网络）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="nn-f-2026-11-14">第一步：<code>nn</code> 与 <code>F</code> 的分工（2026-11-14）</h3>
+<p>同一个运算往往有两种写法：</p>
+<table>
+<thead>
+<tr>
+<th><code>torch.nn.X</code>（类，模块）</th>
+<th><code>torch.nn.functional.x</code>（函数）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nn.LayerNorm(d)</code>：自带可训练的 weight、bias</td>
+<td><code>F.layer_norm(x, (d,), w, b)</code>：参数自己传</td>
+</tr>
+<tr>
+<td><code>nn.Dropout(p)</code>：记得 train / eval 状态</td>
+<td><code>F.dropout(x, p, training=...)</code>：自己传</td>
+</tr>
+<tr>
+<td>放进模型树、进 state_dict（第 7 章）</td>
+<td>纯计算，没有状态</td>
+</tr>
+</tbody>
+</table>
+<p>规矩：<strong>有参数或有状态的用 <code>nn.</code> 类</strong>，纯计算（激活、softmax、attention）用 <code>F.</code> 函数。</p>
+<p><strong>一句话</strong>：nn 是带参数和状态的模块，F 是纯函数；有参数用 nn，纯计算用 F。</p>
+<h3 id="layernorm-rmsnorm2026-11-14">第二步：LayerNorm 与 RMSNorm（2026-11-14）</h3>
+<p><strong>目的</strong>：让每个 token 的向量"大小稳定"，层数叠很多也不会越算越大或越小（Transformer 第 19 章）。</p>
+<p><strong>LayerNorm</strong>：减均值、除标准差，再乘可学习的 <span class="arithmatex">\(\gamma\)</span> 加 <span class="arithmatex">\(\beta\)</span>：</p>
+<div class="arithmatex">\[\text{LN}(x) = \gamma \cdot \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} + \beta\]</div>
+<p><span class="arithmatex">\(\mu\)</span>（读"缪"）是均值，<span class="arithmatex">\(\sigma^2\)</span> 是方差，<span class="arithmatex">\(\epsilon\)</span>（读"艾普西隆"）是防止除零的小数。</p>
+<p><strong>RMSNorm</strong>：不减均值，只除以均方根，没有 <span class="arithmatex">\(\beta\)</span>。少一次规约、少一个参数，效果差不多，Llama 以来的模型都用它：</p>
+<div class="arithmatex">\[\text{RMSNorm}(x) = \gamma \cdot \frac{x}{\sqrt{\frac{1}{d}\sum_i x_i^2 + \epsilon}}\]</div>
+<p><strong>数字演示</strong>：<span class="arithmatex">\(x = [1, 2, 3, 4]\)</span>，<span class="arithmatex">\(\gamma = 1\)</span>、<span class="arithmatex">\(\beta = 0\)</span>：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>中间量</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LayerNorm</td>
+<td><span class="arithmatex">\(\mu = 2.5\)</span>，<span class="arithmatex">\(\sigma^2 = 1.25\)</span>，<span class="arithmatex">\(\sigma = 1.118\)</span></td>
+<td><span class="arithmatex">\([-1.342, -0.447, 0.447, 1.342]\)</span></td>
+</tr>
+<tr>
+<td>RMSNorm</td>
+<td><span class="arithmatex">\(\frac{1 + 4 + 9 + 16}{4} = 7.5\)</span>，<span class="arithmatex">\(\sqrt{7.5} = 2.739\)</span></td>
+<td><span class="arithmatex">\([0.365, 0.730, 1.095, 1.461]\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>（实测 <code>F.layer_norm</code> 和 <code>nn.RMSNorm(4)</code> 输出一致。）LayerNorm 结果均值为 0；RMSNorm 结果不一定，但平方的平均是 1。</p>
+<p><strong>一句话</strong>：LayerNorm 减均值除标准差；RMSNorm 只除均方根，更省，现在的 LLM 默认用它。</p>
+<h3 id="swiglu2026-11-14">第三步：激活函数与 SwiGLU（2026-11-14）</h3>
+<p><strong>激活函数</strong>给网络加上"弯折"，不然多少层线性叠起来还是线性。</p>
+<table>
+<thead>
+<tr>
+<th>名字</th>
+<th>公式</th>
+<th><span class="arithmatex">\(x = [-2, -0.5, 0, 1, 3]\)</span> 的输出</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ReLU</td>
+<td><span class="arithmatex">\(\max(x, 0)\)</span></td>
+<td>[0, 0, 0, 1, 3]</td>
+</tr>
+<tr>
+<td>GELU</td>
+<td><span class="arithmatex">\(x \cdot \Phi(x)\)</span>（<span class="arithmatex">\(\Phi\)</span> 是标准正态的累积概率）</td>
+<td>[−0.046, −0.154, 0, 0.841, 2.996]</td>
+</tr>
+<tr>
+<td>SiLU</td>
+<td><span class="arithmatex">\(x \cdot \sigma(x)\)</span>（<span class="arithmatex">\(\sigma\)</span> 是 sigmoid）</td>
+<td>[−0.238, −0.189, 0, 0.731, 2.858]</td>
+</tr>
+</tbody>
+</table>
+<p>GELU、SiLU 是"平滑版 ReLU"：负数不是一刀切成 0，而是留一点点；在 0 附近可导。</p>
+<p><strong>SwiGLU</strong>（现在 LLM 的 FFN 标配）：两条路，一条过 SiLU 当"门"，一条不过，逐元素相乘，再投影回去：</p>
+<div class="arithmatex">\[\text{FFN}(x) = W_2 \big(\text{SiLU}(x W_1) \odot (x W_3)\big)\]</div>
+<p><span class="arithmatex">\(\odot\)</span> 读"逐元素乘"。PyTorch 里没有现成的 SwiGLU 层，就三行：</p>
+<pre><code class="language-python">def swiglu(x, w1, w2, w3):
+    return (F.silu(x @ w1) * (x @ w3)) @ w2
+</code></pre>
+<p><strong>一句话</strong>：GELU / SiLU 是平滑的 ReLU；SwiGLU = SiLU 门 × 线性路，再投影，三个矩阵。</p>
+<h3 id="sdpa-attention2026-11-14">第四步：SDPA——一行 attention，背后自动挑最快的实现（2026-11-14）</h3>
+<p>自己写 attention（Transformer 第 9–17 章的公式）：</p>
+<pre><code class="language-python">s = q @ k.transpose(-1, -2) / math.sqrt(d)              # 打分
+s = s.masked_fill(causal_mask, float(&quot;-inf&quot;))           # 因果遮挡
+o = s.softmax(-1) @ v                                   # 加权
+</code></pre>
+<p>问题：中间的分数表 <code>s</code> 是 T × T 的。T = 8192 时，每个头一张表 6400 多万个数，写进显存再读出来，又慢又占地方。</p>
+<p><strong>用 SDPA</strong>：</p>
+<pre><code class="language-python">o = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+</code></pre>
+<p>（实测和手写版最大差 1.6 × 10⁻⁷，只是浮点舍入差。）它会根据设备、dtype、形状、有没有 mask，<strong>自动挑后端</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>后端</th>
+<th>特点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Flash（FlashAttention-2）</td>
+<td>分块算、不写出 T × T 表，最快最省显存；要 fp16 / bf16</td>
+</tr>
+<tr>
+<td>Memory-efficient（xFormers 那一派）</td>
+<td>支持 float32 和更多 mask 形式</td>
+</tr>
+<tr>
+<td>cuDNN</td>
+<td>新 GPU 上 NVIDIA 的实现</td>
+</tr>
+<tr>
+<td>Math</td>
+<td>就是上面三行的参考实现，哪都能跑</td>
+</tr>
+</tbody>
+</table>
+<p>可以用 <code>with torch.nn.attention.sdpa_kernel(SDPBackend.FLASH_ATTENTION):</code> 强制指定（指定的后端不支持当前输入时会报错，正好用来检查）。FlashAttention 原理见 CUDA 讲义第 22 章；第 29 章讲它为什么快（不写中间表 = 省显存流量）。</p>
+<p><strong>一句话</strong>：attention 用 SDPA 一行写，它自动选 Flash 等后端，不写出 T × T 分数表。</p>
+<h3 id="flexattention-attention-kernel2026-11-14">第五步：FlexAttention——想改 attention 又不想手写 kernel（2026-11-14）</h3>
+<p>研究里常要改 attention 的"打分规则"：滑动窗口、ALiBi 位置偏置、文档内因果（打包训练时不跨文档看）、前缀可双向……每种都手写一个 Flash kernel 太难。</p>
+<p><strong>FlexAttention</strong>：你只写一个<strong>小函数</strong>说明"分数怎么改"或"哪些位置能看"，PyTorch 用 <code>torch.compile</code> 把它<strong>编译进</strong>一个 FlashAttention 风格的 Triton kernel：</p>
+<pre><code class="language-python">from torch.nn.attention.flex_attention import flex_attention, create_block_mask
+
+def rel_bias(score, b, h, q_idx, kv_idx):        # score_mod：改分数
+    return score + (kv_idx - q_idx) * 0.1
+
+def causal(b, h, q_idx, kv_idx):                 # mask_mod：能不能看
+    return q_idx &gt;= kv_idx
+
+block_mask = create_block_mask(causal, B=None, H=None, Q_LEN=T, KV_LEN=T)
+o = torch.compile(flex_attention)(q, k, v, score_mod=rel_bias, block_mask=block_mask)
+</code></pre>
+<p><code>block_mask</code> 还会记下哪些<strong>整块</strong>全被遮住，算的时候直接跳过（因果 mask 能省将近一半计算）。</p>
+<p><strong>本机实测的限制</strong>：Mac 上不编译直接调 <code>flex_attention</code> 能跑（会提示这是慢速参考实现，结果和手写版差 1.2 × 10⁻⁷）；<code>torch.compile(flex_attention)</code> 在 Mac CPU 上报"current platform is not supported"。它的主场是 CUDA GPU。</p>
+<p><strong>一句话</strong>：FlexAttention = 写一个改分数 / 定可见性的小函数，编译成 Flash 风格的 kernel；整块被遮住的直接跳过。</p>
+<h3 id="attention-vs-sdpa">动画演示：手写 attention vs SDPA 的显存</h3>
+<p><img alt="attention 的分数表" src="../animations/14-attention-memory.gif" /></p>
+<p>可交互版：<a href="../animations/14-attention-memory.html">animations/14-attention-memory.html</a>。滑块调序列长度 T。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>左边手写版：Q、K 先算出完整的 T × T 分数表，写进显存，再 softmax、再乘 V；</li>
+<li>右边 Flash 后端：一块块地算，分数表只在片上存一小块，用完就丢；</li>
+<li>下方数字：T 从 1k 拖到 32k，手写版分数表大小按 T² 增长，Flash 版只按 T 增长。</li>
+</ol>
+<h2 id="_2">练习与作答记录</h2>
+<p><strong>题 1</strong>：<span class="arithmatex">\(x = [3, -1, 2, 0]\)</span>，<span class="arithmatex">\(\gamma = 1\)</span>、<span class="arithmatex">\(\beta = 0\)</span>。算 LayerNorm（<span class="arithmatex">\(\epsilon\)</span> 忽略）。提示：先算均值和方差。</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：SwiGLU 的 FFN 有几个权重矩阵？如果 <span class="arithmatex">\(d_{model} = 512\)</span>、中间维 <span class="arithmatex">\(d_{ff} = 1365\)</span>（ff = feed-forward），参数一共多少（不算偏置）？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：T = 4096，16 个头，batch 2，fp16（2 字节）。手写 attention 的分数表一共占多少显存？用 Flash 后端为什么不占这么多？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_3">口诀</h2>
+<blockquote>
+<p>有参数用 nn，纯计算用 F；LayerNorm 减均值除标准差，RMSNorm 只除均方根；<br />
+GELU、SiLU 是平滑 ReLU，SwiGLU 门乘线性再投影；<br />
+attention 用 SDPA，自动挑 Flash 不写 T 方表；想改规则写小函数，Flex 编成 kernel。</p>
+</blockquote>
+<h2 id="_4">本章复习卡片</h2>
+<ul>
+<li>P45（nn 类 vs F 函数：有参数 / 状态用 nn）</li>
+<li>P46（LayerNorm vs RMSNorm 公式；[1, 2, 3, 4] → LN [−1.342, −0.447, 0.447, 1.342]，RMS [0.365, 0.730, 1.095, 1.461]）</li>
+<li>P47（SwiGLU：<span class="arithmatex">\(W_2(\text{SiLU}(xW_1) \odot xW_3)\)</span>，三个矩阵）</li>
+<li>P48（SDPA 后端：Flash / mem-efficient / cuDNN / math；不写 T × T 分数表；sdpa_kernel 强制后端）</li>
+<li>P49（FlexAttention：score_mod / mask_mod + block_mask 跳过整块；需要 compile，Mac CPU 只能跑参考版）</li>
+</ul>
+<h2 id="_5">附录 · 延伸阅读</h2>
+<h3 id="_6">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ AISPE 第 13 章</td>
+<td><code>ch13.md</code> 第 959–996 行</td>
+<td>SDPA 后端与 FlexAttention 在训练中的用法</td>
+</tr>
+<tr>
+<td>★ FlexAttention 博客（PyTorch 团队，2024-08）</td>
+<td>全文（〔在线〕pytorch.org/blog/flexattention/）</td>
+<td>score_mod / mask_mod 的各种例子与性能</td>
+</tr>
+<tr>
+<td>CS336 a1 handout</td>
+<td>§3 RMSNorm、SwiGLU 小节</td>
+<td>自己实现这两个模块</td>
+</tr>
+<tr>
+<td>Shazeer 2020「GLU Variants Improve Transformer」</td>
+<td>表 1–2（〔在线〕arXiv:2002.05202）</td>
+<td>SwiGLU 的出处</td>
+</tr>
+<tr>
+<td>Zhang &amp; Sennrich 2019「Root Mean Square Layer Normalization」</td>
+<td>§3（〔在线〕arXiv:1910.07467）</td>
+<td>RMSNorm 的出处</td>
+</tr>
+<tr>
+<td>CUDA 讲义 第 22 章 FlashAttention</td>
+<td>全章</td>
+<td>Flash 后端的 kernel 原理</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_7">数学原理</h3>
+<ul>
+<li><strong>LayerNorm</strong>：<span class="arithmatex">\(\mu = \frac{1}{d}\sum x_i\)</span>，<span class="arithmatex">\(\sigma^2 = \frac{1}{d}\sum (x_i - \mu)^2\)</span>（PyTorch 用有偏方差，除以 d）。</li>
+<li><strong>GELU</strong>：<span class="arithmatex">\(x\Phi(x)\)</span>；常用近似 <span class="arithmatex">\(0.5x(1 + \tanh[\sqrt{2/\pi}(x + 0.044715x^3)])\)</span>（<code>approximate="tanh"</code>）。</li>
+<li><strong>SiLU</strong>：<span class="arithmatex">\(x \cdot \frac{1}{1 + e^{-x}}\)</span>。</li>
+<li><strong>分数表大小</strong>：<span class="arithmatex">\(B \times H \times T^2 \times\)</span> 每个数的字节数。</li>
+</ul>
+<h3 id="_8">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>F.layer_norm</code> / <code>nn.RMSNorm</code></td>
+<td>归一化</td>
+</tr>
+<tr>
+<td><code>F.gelu</code> / <code>F.silu</code></td>
+<td>激活</td>
+</tr>
+<tr>
+<td><code>F.scaled_dot_product_attention(q, k, v, attn_mask, is_causal, dropout_p)</code></td>
+<td>一行 attention</td>
+</tr>
+<tr>
+<td><code>sdpa_kernel(SDPBackend.X)</code></td>
+<td>指定后端</td>
+</tr>
+<tr>
+<td><code>flex_attention(q, k, v, score_mod, block_mask)</code> + <code>create_block_mask</code></td>
+<td>自定义 attention</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch14_functional_attention.py</code>，配套测试 <code>tests/test_ch07_15.py</code>；同一章的 notebook：<code>notebooks/ch14_functional_attention.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch14_functional_attention.py   # 一步一步打印  
+uv run pytest tests/test_ch07_15.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第二步 归一化</td>
+<td>LN / RMSNorm</td>
+<td><code>norms()</code></td>
+<td>[−1.342, −0.447, 0.447, 1.342] / [0.365, 0.730, 1.095, 1.461]</td>
+</tr>
+<tr>
+<td>第三步 激活</td>
+<td>ReLU / GELU / SiLU</td>
+<td><code>activations()</code></td>
+<td>见讲义表</td>
+</tr>
+<tr>
+<td>第四步 SDPA</td>
+<td>和手写一致</td>
+<td><code>sdpa_vs_manual()</code></td>
+<td>最大差 1.6 × 10⁻⁷</td>
+</tr>
+<tr>
+<td>第四步 分数表</td>
+<td>B·H·T²·2</td>
+<td><code>scores_bytes(1, 32, 16384)</code></td>
+<td>17.2 GB</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">F.layer_norm(x, (4,)); nn.RMSNorm(4)(x)
+(F.silu(x @ w1) * (x @ w3)) @ w2         # SwiGLU
+F.scaled_dot_product_attention(q, k, v, is_causal=True)
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong><code>nn.RMSNorm</code> 的输出带 <code>grad_fn</code></strong>：它有可训练的 γ，所以代码里 <code>.detach()</code> 了再打印。</li>
+<li><strong>FlexAttention 在 Mac CPU 上编译不了</strong>：本章代码只对比 SDPA；Flex 的不编译版本能跑但很慢。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把 <code>norms</code> 的输入换成 [1, 1, 1, 1]，看 LayerNorm 输出什么（注意 ε）。</li>
+<li><code>scores_bytes</code> 换成 T = 4096 和 32768，看比例。</li>
+</ul><nav class="pager"><a href="13-reduce-matmul.html">← 第 13 章 · 规约、矩阵乘与数值稳定</a><a href="15-loss-optimizer.html">第 15 章 · 损失与优化器：cross_entropy 的细节和 AdamW 的一步 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

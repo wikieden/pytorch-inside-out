@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 26 章 · 混合精度：bf16、fp16、TF32、FP8 怎么选 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="26-bf16fp16tf32fp8">第 26 章 · 混合精度：bf16、fp16、TF32、FP8 怎么选</h1><p><a class="btn" href="../animations/26-float-formats.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：不同浮点格式的位是怎么分的，各自"能表示多大"和"能分辨多细"？为什么 bf16 不用 GradScaler 而 fp16 要？TF32 是什么，一行开关能快几倍？FP8 训练难在哪？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/25-input-sync.html">第 25 章 数据管道</a> · 下一章：<a href="../lessons/27-memory.html">第 27 章 显存</a><br />
+对应原文：Ultra-Scale Playbook §Mixed Precision Training（<code>ultrascale-playbook.md</code> 第 2821 行起；FP8 pretraining 第 2916 行）；多机报告 §4「精度：BF16 到 FP8」（<code>03-engineering-report.md</code> 第 286–340 行，含 DeepSeek-V3 FP8 配方）；官方文档 AMP 与 <code>torch.set_float32_matmul_precision</code>（〔在线〕）；本章 finfo 数字是本机 torch 2.15.0 实测</p>
+<p>本章缩写：fp32 / fp16 = 32 / 16 位浮点（floating point）；bf16 = brain float 16；TF32 = TensorFloat-32（NVIDIA 张量核心用的 19 位格式）；FP8 = 8 位浮点，E4M3 / E5M2 = 指数（Exponent）4 位尾数（Mantissa）3 位 / 指数 5 位尾数 2 位；AMP = Automatic Mixed Precision；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="2026-11-14">第一步：浮点数的两笔预算——指数管范围，尾数管精度（2026-11-14）</h3>
+<p>浮点数 = 符号 × 尾数 × 2^指数，像科学计数法 <span class="arithmatex">\(1.234 \times 10^5\)</span>。位数固定时：</p>
+<ul>
+<li><strong>指数位</strong>多 → 能表示的数<strong>跨度大</strong>（多大、多小都行）；</li>
+<li><strong>尾数位</strong>多 → 相邻两个数之间<strong>分得细</strong>。</li>
+</ul>
+<p><strong>类比：一把尺子。</strong> 指数位决定尺子多长，尾数位决定刻度多密。总长度（位数）一定，长了就疏，密了就短。</p>
+<p><strong>本机实测</strong>（<code>torch.finfo</code>）：</p>
+<table>
+<thead>
+<tr>
+<th>格式</th>
+<th>位：符号 / 指数 / 尾数</th>
+<th>最大值</th>
+<th>eps（1 附近的间隔）</th>
+<th>最小正规数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fp32</td>
+<td>1 / 8 / 23</td>
+<td>3.4 × 10³⁸</td>
+<td>1.2 × 10⁻⁷</td>
+<td>1.2 × 10⁻³⁸</td>
+</tr>
+<tr>
+<td>bf16</td>
+<td>1 / 8 / 7</td>
+<td>3.4 × 10³⁸</td>
+<td><strong>0.0078</strong></td>
+<td>1.2 × 10⁻³⁸</td>
+</tr>
+<tr>
+<td>fp16</td>
+<td>1 / 5 / 10</td>
+<td><strong>65504</strong></td>
+<td>0.00098</td>
+<td><strong>6.1 × 10⁻⁵</strong></td>
+</tr>
+<tr>
+<td>fp8 E4M3</td>
+<td>1 / 4 / 3</td>
+<td>448</td>
+<td>0.125</td>
+<td>0.0156</td>
+</tr>
+<tr>
+<td>fp8 E5M2</td>
+<td>1 / 5 / 2</td>
+<td>57344</td>
+<td>0.25</td>
+<td>6.1 × 10⁻⁵</td>
+</tr>
+</tbody>
+</table>
+<p>（TF32：1 / 8 / 10，只在张量核心内部用，没有对应的 dtype。）</p>
+<p><strong>数字演示</strong>：</p>
+<ul>
+<li><code>torch.tensor(1.001, dtype=torch.bfloat16)</code> → <strong>1.0</strong>：bf16 在 1 附近间隔是 0.0078，1.001 被舍回 1；</li>
+<li>同样的数在 fp16 → <strong>1.0010</strong>：fp16 尾数多，分得清；</li>
+<li>3.14159 转 FP8 E4M3 → <strong>3.25</strong>：只剩 3 位尾数，很粗。</li>
+</ul>
+<p><strong>一句话</strong>：指数位管范围、尾数位管精度；bf16 范围和 fp32 一样但很粗，fp16 更细但最大只到 65504。</p>
+<h3 id="bf16-vs-fp16-fp16-gradscaler2026-11-14">第二步：bf16 vs fp16——为什么 fp16 要 GradScaler（2026-11-14）</h3>
+<p><strong>fp16 的两个问题</strong>：</p>
+<ol>
+<li><strong>上溢</strong>：最大 65504。<code>torch.tensor([1e4], dtype=torch.float16) * 10</code> 直接变 inf（第 13 章）。激活或 logits 稍大就爆；</li>
+<li><strong>下溢</strong>：最小正规数约 6 × 10⁻⁵，再往下就靠精度很差的"次正规数"，更小直接变 0。<strong>梯度经常很小</strong>：实测 1 × 10⁻⁸ 转 fp16 就是 <strong>0</strong>——这个参数的梯度丢了。</li>
+</ol>
+<p><strong>GradScaler 的办法</strong>：反向前把 loss <strong>乘一个大数</strong>（比如 65536），所有梯度跟着放大 65536 倍，躲开下溢区；更新前再除回来。实测 1 × 10⁻⁸ × 65536 转 fp16 = 0.0007，保住了。放大倍数太大导致 inf 时，GradScaler 会跳过这一步并把倍数调小。</p>
+<pre><code class="language-python">scaler = torch.amp.GradScaler(&quot;cuda&quot;)
+with torch.autocast(&quot;cuda&quot;, dtype=torch.float16):
+    loss = model(x)
+scaler.scale(loss).backward()      # 放大后反向
+scaler.unscale_(opt)               # 裁剪前先除回来
+clip_grad_norm_(model.parameters(), 1.0)
+scaler.step(opt); scaler.update()  # 有 inf 就跳过这步，并调整倍数
+</code></pre>
+<p><strong>bf16 不需要</strong>：指数位和 fp32 一样，范围一样大，梯度不会下溢。代价是精度粗，但神经网络对这点误差不敏感——只要<strong>累加用 fp32</strong>（第 13 章）。所以 A100 及以后的卡<strong>首选 bf16</strong>。</p>
+<p><strong>一句话</strong>：fp16 范围小，梯度下溢要靠 GradScaler 放大；bf16 范围和 fp32 一样，不用 scaler，首选它。</p>
+<h3 id="tf32fp32-2026-11-14">第三步：TF32——fp32 代码的一行加速（2026-11-14）</h3>
+<p>有时候代码就是 fp32（不想改、或者某部分必须 fp32）。Ampere（A100）以后的张量核心支持 <strong>TF32</strong>：输入的 fp32 在乘法时只保留 10 位尾数（和 fp16 一样细）、8 位指数（和 fp32 一样宽），<strong>累加还是 fp32</strong>。</p>
+<pre><code class="language-python">torch.set_float32_matmul_precision(&quot;high&quot;)    # 允许 fp32 矩阵乘走 TF32
+# 默认是 &quot;highest&quot;（本机实测），即真 fp32，慢
+</code></pre>
+<p>H100 上 fp32 矩阵乘约 67 TFLOPS，TF32 约 494 TFLOPS（稠密），<strong>一行快约 7 倍</strong>。对训练几乎没影响。<code>"medium"</code> 还允许用 bf16 算。</p>
+<p><strong>一句话</strong>：<code>set_float32_matmul_precision("high")</code> 让 fp32 矩阵乘走 TF32，精度略降、速度数倍。</p>
+<h3 id="fp82026-11-14">第四步：FP8——再快一倍，但要管好缩放（2026-11-14）</h3>
+<p>H100 的 FP8 张量核心峰值是 bf16 的 2 倍（约 1979 vs 989 TFLOPS）。难点：E4M3 最大只有 448、间隔很粗（第一步的表），数值一大就溢出，一小就丢。</p>
+<p><strong>做法：缩放（scaling）</strong>。每个张量（或每一小块）配一个缩放系数，先把数缩放到 FP8 能表示的范围，再转 FP8 去算，结果再缩放回来：</p>
+<table>
+<thead>
+<tr>
+<th>粒度</th>
+<th>做法</th>
+<th>代表</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>per-tensor（每个张量一个系数）</td>
+<td>按整个张量的最大绝对值定系数</td>
+<td>早期 Transformer Engine</td>
+</tr>
+<tr>
+<td>细粒度块</td>
+<td>每 1 × 128（激活）或 128 × 128（权重）一个系数，一个离群值只影响一小块</td>
+<td>DeepSeek-V3（多机报告 §4.2）</td>
+</tr>
+<tr>
+<td>MX 格式（微缩放）</td>
+<td>每 32 个数共享一个指数，硬件原生支持</td>
+<td>Blackwell（B200）</td>
+</tr>
+</tbody>
+</table>
+<p>惯例：前向用 E4M3（精度高一点），反向的梯度用 E5M2（范围大一点）；主权重、优化器状态、累加仍用 fp32 / bf16。PyTorch 里用 <strong>torchao</strong> 的 float8 训练（<code>convert_to_float8_training</code>，接口名以当前文档为准）或 NVIDIA Transformer Engine。</p>
+<p><strong>一句话</strong>：FP8 再快一倍，但范围和精度都很紧，要靠缩放系数；粒度越细越稳（DeepSeek-V3 用 128 块）。</p>
+<h3 id="_2">动画演示：五种格式的尺子</h3>
+<p><img alt="浮点格式" src="../animations/26-float-formats.gif" /></p>
+<p>可交互版：<a href="../animations/26-float-formats.html">animations/26-float-formats.html</a>。滑块输入一个数，看它在五种格式里变成什么。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>每种格式画成一条位带：符号（灰）/ 指数（蓝）/ 尾数（橙），长度按位数；</li>
+<li>右边是"最大值"和"1 附近的间隔"；</li>
+<li>拖动滑块（从 10⁻⁹ 到 10⁶ 的对数刻度），每种格式下的取值实时显示：fp16 在两头变成 0 或 inf，bf16 两头都稳但中间粗。</li>
+</ol>
+<h2 id="_3">练习与作答记录</h2>
+<p><strong>题 1</strong>：bf16 和 fp16 都是 16 位，各自把位多分给了哪一边？各自的最大值大约多少？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：用 fp16 训练，某参数的梯度是 3 × 10⁻⁹。不用 GradScaler 会怎样？GradScaler 放大 65536 倍后，梯度大约多少，能保住吗？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：一份全是 fp32 的老训练脚本跑在 A100 上，不改模型代码，最省事的一行加速是什么？原理是什么？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_4">口诀</h2>
+<blockquote>
+<p>指数管范围、尾数管精度；bf16 宽而粗，fp16 细而窄；<br />
+fp16 梯度会下溢，GradScaler 先放大再除回；bf16 不用 scaler，累加记得用 fp32；<br />
+fp32 一行开 TF32；FP8 再快一倍，靠缩放系数，粒度越细越稳。</p>
+</blockquote>
+<h2 id="_5">本章复习卡片</h2>
+<ul>
+<li>P91（五种格式的位分配与 finfo：fp16 max 65504、bf16 eps 0.0078；1.001 → bf16 是 1.0）</li>
+<li>P92（fp16 上溢 / 下溢；GradScaler：scale → backward → unscale_ → clip → step → update；1e-8 × 65536 保住）</li>
+<li>P93（TF32：<code>set_float32_matmul_precision("high")</code>，默认 "highest"；H100 fp32 约 67 vs TF32 约 494 TFLOPS）</li>
+<li>P94（FP8：E4M3 前向 / E5M2 反向；per-tensor、128 块、MX 缩放；主权重与累加保持高精度）</li>
+</ul>
+<h2 id="_6">附录 · 延伸阅读</h2>
+<h3 id="_7">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ Ultra-Scale Playbook §Mixed Precision Training</td>
+<td><code>ultrascale-playbook.md</code> 第 2821–2976 行</td>
+<td>各格式的图、loss scaling、FP8 预训练现状</td>
+</tr>
+<tr>
+<td>★ 多机报告 §4</td>
+<td><code>03-engineering-report.md</code> 第 286–340 行</td>
+<td>DeepSeek-V3 的 FP8 配方逐条</td>
+</tr>
+<tr>
+<td>Micikevicius et al. 2017「Mixed Precision Training」</td>
+<td>§3 三个技巧（fp32 主权重、loss scaling、fp32 累加）（〔在线〕arXiv:1710.03740）</td>
+<td>混合精度的出处</td>
+</tr>
+<tr>
+<td>DeepSeek-V3 技术报告</td>
+<td>§3.3 FP8 Training（<code>distributed-pretraining/materials/text/deepseek-v3-2412.19437.txt</code>）</td>
+<td>细粒度量化与高精度累加</td>
+</tr>
+<tr>
+<td>torchao float8 文档</td>
+<td>README（〔在线〕github.com/pytorch/ao）</td>
+<td>PyTorch 原生 FP8 训练</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">数学原理</h3>
+<ul>
+<li><strong>浮点值</strong>：<span class="arithmatex">\((-1)^s \times (1.m) \times 2^{e - \text{bias}}\)</span>。尾数 <span class="arithmatex">\(p\)</span> 位时，1 附近的间隔 eps <span class="arithmatex">\(= 2^{-p}\)</span>：bf16 <span class="arithmatex">\(2^{-7} = 0.0078\)</span>，fp16 <span class="arithmatex">\(2^{-10} ≈ 0.00098\)</span>。</li>
+<li><strong>最大值</strong>由指数位决定：fp16 指数 5 位，最大约 <span class="arithmatex">\(2^{15} \times (2 - 2^{-10}) = 65504\)</span>。</li>
+<li><strong>loss scaling</strong>：梯度线性于 loss，<span class="arithmatex">\(\nabla(sL) = s\nabla L\)</span>，所以放大 loss 等于放大所有梯度，除回来不改变结果。</li>
+</ul>
+<h3 id="_9">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>torch.finfo(dtype)</code></td>
+<td>看格式的 max / eps / tiny</td>
+</tr>
+<tr>
+<td><code>torch.autocast(dev, dtype=torch.bfloat16)</code></td>
+<td>bf16 混合精度</td>
+</tr>
+<tr>
+<td><code>torch.amp.GradScaler("cuda")</code></td>
+<td>fp16 才需要</td>
+</tr>
+<tr>
+<td><code>torch.set_float32_matmul_precision("high")</code></td>
+<td>开 TF32</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_10">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch26_mixed_precision.py</code>，配套测试 <code>tests/test_ch23_28.py</code>；同一章的 notebook：<code>notebooks/ch26_mixed_precision.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch26_mixed_precision.py   # 一步一步打印  
+uv run pytest tests/test_ch23_28.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 finfo</td>
+<td>max / eps / tiny</td>
+<td><code>finfo_table()</code></td>
+<td>fp16 max 65504、bf16 eps 0.0078、E4M3 max 448</td>
+</tr>
+<tr>
+<td>第一步 舍入</td>
+<td>—</td>
+<td><code>rounding_examples()</code></td>
+<td>bf16 1.0、fp16 1.001、E4M3 3.25、fp16 溢出 inf</td>
+</tr>
+<tr>
+<td>第二步 loss scaling</td>
+<td>放大 65536</td>
+<td><code>loss_scaling()</code></td>
+<td>0.0 → 0.00066</td>
+</tr>
+<tr>
+<td>第三步 TF32</td>
+<td>—</td>
+<td><code>get_float32_matmul_precision()</code></td>
+<td>highest（默认）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">torch.finfo(torch.float16).max            # 65504
+torch.tensor(1e-8).half()                 # 0：下溢
+(torch.tensor(1e-8) * 65536).half()       # 保住了
+</code></pre>
+<p><strong>代码里才看得到的 1 件事</strong>：</p>
+<ol>
+<li><strong>E4M3 的名字带 fn</strong>：<code>float8_e4m3fn</code> 的 fn 表示没有 inf（finite），最大 448。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li><code>torch.tensor(1.01, dtype=torch.bfloat16)</code> 看舍入成多少。</li>
+<li>把 <code>loss_scaling</code> 的 scale 改成 1024，看还保不保得住 1e-8。</li>
+</ul><nav class="pager"><a href="25-input-sync.html">← 第 25 章 · 让 GPU 别等：数据管道与同步点</a><a href="27-memory.html">第 27 章 · 显存：谁占了、怎么省、怎么看 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

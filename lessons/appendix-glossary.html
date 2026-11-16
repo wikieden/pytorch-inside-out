@@ -1,0 +1,937 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>附录 · 缩写与术语表 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="_1">附录 · 缩写与术语表</h1>
+<blockquote>
+<p>用途：讲义里遇到缩写或术语，先查这一页。每章开头的"本章缩写"只列这一章用到的。由 <code>work/pytorch-glossary.py</code> 从各章"本章缩写"行汇总生成（2026-11-15，全书 36 章写完后）。</p>
+</blockquote>
+<h2 id="_2">缩写（按第一次出现的章节排）</h2>
+<table>
+<thead>
+<tr>
+<th>缩写</th>
+<th>全称与意思</th>
+<th>第一次出现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GPU / CPU</td>
+<td>Graphics / Central Processing Unit（图形 / 中央 处理单元）</td>
+<td><a href="../lessons/01-op-journey.html">第 1 章</a></td>
+</tr>
+<tr>
+<td>MPS</td>
+<td>Metal Performance Shaders（Apple 的 Metal 性能着色器，Mac 上的 GPU 后端）</td>
+<td><a href="../lessons/01-op-journey.html">第 1 章</a></td>
+</tr>
+<tr>
+<td>API</td>
+<td>Application Programming Interface（应用 / 编程 / 接口）</td>
+<td><a href="../lessons/01-op-journey.html">第 1 章</a></td>
+</tr>
+<tr>
+<td>mm</td>
+<td>matrix multiply（矩阵乘法）</td>
+<td><a href="../lessons/01-op-journey.html">第 1 章</a></td>
+</tr>
+<tr>
+<td>dtype</td>
+<td>data type（数据 / 类型）</td>
+<td><a href="../lessons/02-tensor-stride.html">第 2 章</a></td>
+</tr>
+<tr>
+<td>numel</td>
+<td>number of elements（元素 / 个数）</td>
+<td><a href="../lessons/02-tensor-stride.html">第 2 章</a></td>
+</tr>
+<tr>
+<td>AD</td>
+<td>Automatic Differentiation（自动 / 微分）</td>
+<td><a href="../lessons/03-dispatcher.html">第 3 章</a></td>
+</tr>
+<tr>
+<td>TLS</td>
+<td>Thread-Local State（线程 / 局部 / 状态）</td>
+<td><a href="../lessons/03-dispatcher.html">第 3 章</a></td>
+</tr>
+<tr>
+<td>bf16</td>
+<td>brain floating point 16（Google Brain 提出的 16 位浮点）</td>
+<td><a href="../lessons/03-dispatcher.html">第 3 章</a></td>
+</tr>
+<tr>
+<td>XPU</td>
+<td>Intel GPU 后端的名字（X 表示"任意"）</td>
+<td><a href="../lessons/03-dispatcher.html">第 3 章</a></td>
+</tr>
+<tr>
+<td>DAG</td>
+<td>Directed Acyclic Graph（有向 / 无环 / 图）</td>
+<td><a href="../lessons/04-autograd.html">第 4 章</a></td>
+</tr>
+<tr>
+<td>CUDA</td>
+<td>Compute Unified Device Architecture（计算 / 统一 / 设备 / 架构，NVIDIA 的 GPU 计算平台）</td>
+<td><a href="../lessons/05-cuda-semantics.html">第 5 章</a></td>
+</tr>
+<tr>
+<td>kernel（内核）</td>
+<td>在 GPU 上跑的一个函数</td>
+<td><a href="../lessons/05-cuda-semantics.html">第 5 章</a></td>
+</tr>
+<tr>
+<td>smi</td>
+<td>System Management Interface（系统 / 管理 / 接口）</td>
+<td><a href="../lessons/05-cuda-semantics.html">第 5 章</a></td>
+</tr>
+<tr>
+<td>FX</td>
+<td>原意 functional transformation（函数 / 变换），PyTorch 的图表示</td>
+<td><a href="../lessons/06-compile-stack.html">第 6 章</a></td>
+</tr>
+<tr>
+<td>AOT</td>
+<td>Ahead-Of-Time（提前）</td>
+<td><a href="../lessons/06-compile-stack.html">第 6 章</a></td>
+</tr>
+<tr>
+<td>IR</td>
+<td>Intermediate Representation（中间 / 表示）</td>
+<td><a href="../lessons/06-compile-stack.html">第 6 章</a></td>
+</tr>
+<tr>
+<td>JIT</td>
+<td>Just-In-Time（即时，用到时才编译）</td>
+<td><a href="../lessons/06-compile-stack.html">第 6 章</a></td>
+</tr>
+<tr>
+<td>MLP</td>
+<td>Multi-Layer Perceptron（多层 / 感知机，几层全连接叠起来）</td>
+<td><a href="../lessons/07-nn-module.html">第 7 章</a></td>
+</tr>
+<tr>
+<td>fc</td>
+<td>fully connected（全连接层）</td>
+<td><a href="../lessons/07-nn-module.html">第 7 章</a></td>
+</tr>
+<tr>
+<td>BN</td>
+<td>BatchNorm（批归一化）</td>
+<td><a href="../lessons/07-nn-module.html">第 7 章</a></td>
+</tr>
+<tr>
+<td>I/O</td>
+<td>Input/Output（输入 / 输出，这里指读硬盘）</td>
+<td><a href="../lessons/08-dataloader.html">第 8 章</a></td>
+</tr>
+<tr>
+<td>batch（批）</td>
+<td>一次喂给模型的一组样本</td>
+<td><a href="../lessons/08-dataloader.html">第 8 章</a></td>
+</tr>
+<tr>
+<td>SGD</td>
+<td>Stochastic Gradient Descent（随机 / 梯度 / 下降）</td>
+<td><a href="../lessons/09-training-loop.html">第 9 章</a></td>
+</tr>
+<tr>
+<td>MSE</td>
+<td>Mean Squared Error（均方误差）</td>
+<td><a href="../lessons/09-training-loop.html">第 9 章</a></td>
+</tr>
+<tr>
+<td>lr</td>
+<td>learning rate（学习率）</td>
+<td><a href="../lessons/09-training-loop.html">第 9 章</a></td>
+</tr>
+<tr>
+<td>AMP</td>
+<td>Automatic Mixed Precision（自动 / 混合 / 精度）</td>
+<td><a href="../lessons/09-training-loop.html">第 9 章</a></td>
+</tr>
+<tr>
+<td>fp16 / bf16</td>
+<td>16 位浮点的两种格式（第 26 章）</td>
+<td><a href="../lessons/09-training-loop.html">第 9 章</a></td>
+</tr>
+<tr>
+<td>ckpt</td>
+<td>checkpoint（检查点 / 存档）</td>
+<td><a href="../lessons/10-save-load.html">第 10 章</a></td>
+</tr>
+<tr>
+<td>RNG</td>
+<td>Random Number Generator（随机 / 数 / 生成器）</td>
+<td><a href="../lessons/10-save-load.html">第 10 章</a></td>
+</tr>
+<tr>
+<td>FQN</td>
+<td>Fully Qualified Name（完整 / 限定 / 名）</td>
+<td><a href="../lessons/10-save-load.html">第 10 章</a></td>
+</tr>
+<tr>
+<td>B</td>
+<td>batch（批大小）</td>
+<td><a href="../lessons/11-shape-broadcast.html">第 11 章</a></td>
+</tr>
+<tr>
+<td>T</td>
+<td>time / tokens（序列长度）</td>
+<td><a href="../lessons/11-shape-broadcast.html">第 11 章</a></td>
+</tr>
+<tr>
+<td>D</td>
+<td>d_model（模型维度）</td>
+<td><a href="../lessons/11-shape-broadcast.html">第 11 章</a></td>
+</tr>
+<tr>
+<td>H</td>
+<td>heads（头数）</td>
+<td><a href="../lessons/11-shape-broadcast.html">第 11 章</a></td>
+</tr>
+<tr>
+<td>d</td>
+<td>每个头的维度 = D / H</td>
+<td><a href="../lessons/11-shape-broadcast.html">第 11 章</a></td>
+</tr>
+<tr>
+<td>MoE</td>
+<td>Mixture of Experts（混合 / 专家：每个 token 只送给少数几个"专家"子网络）</td>
+<td><a href="../lessons/12-index-scatter.html">第 12 章</a></td>
+</tr>
+<tr>
+<td>idx</td>
+<td>index（下标）</td>
+<td><a href="../lessons/12-index-scatter.html">第 12 章</a></td>
+</tr>
+<tr>
+<td>FLOP</td>
+<td>FLoating-point OPeration（浮点 / 运算，一次加法或乘法）</td>
+<td><a href="../lessons/13-reduce-matmul.html">第 13 章</a></td>
+</tr>
+<tr>
+<td>einsum</td>
+<td>Einstein summation（爱因斯坦 / 求和约定）</td>
+<td><a href="../lessons/13-reduce-matmul.html">第 13 章</a></td>
+</tr>
+<tr>
+<td>bmm</td>
+<td>batch matrix multiply（批量矩阵乘）</td>
+<td><a href="../lessons/13-reduce-matmul.html">第 13 章</a></td>
+</tr>
+<tr>
+<td>inf</td>
+<td>infinity（无穷大）</td>
+<td><a href="../lessons/13-reduce-matmul.html">第 13 章</a></td>
+</tr>
+<tr>
+<td>LN</td>
+<td>LayerNorm（层 / 归一化）</td>
+<td><a href="../lessons/14-functional-attention.html">第 14 章</a></td>
+</tr>
+<tr>
+<td>RMS</td>
+<td>Root Mean Square（均方根）</td>
+<td><a href="../lessons/14-functional-attention.html">第 14 章</a></td>
+</tr>
+<tr>
+<td>ReLU</td>
+<td>Rectified Linear Unit（整流 / 线性 / 单元）</td>
+<td><a href="../lessons/14-functional-attention.html">第 14 章</a></td>
+</tr>
+<tr>
+<td>GELU</td>
+<td>Gaussian Error Linear Unit（高斯 / 误差 / 线性 / 单元）</td>
+<td><a href="../lessons/14-functional-attention.html">第 14 章</a></td>
+</tr>
+<tr>
+<td>SiLU</td>
+<td>Sigmoid Linear Unit（S 形 / 线性 / 单元，也叫 Swish）</td>
+<td><a href="../lessons/14-functional-attention.html">第 14 章</a></td>
+</tr>
+<tr>
+<td>GLU</td>
+<td>Gated Linear Unit（门控 / 线性 / 单元）</td>
+<td><a href="../lessons/14-functional-attention.html">第 14 章</a></td>
+</tr>
+<tr>
+<td>SDPA</td>
+<td>Scaled Dot-Product Attention（缩放 / 点积 / 注意力）</td>
+<td><a href="../lessons/14-functional-attention.html">第 14 章</a></td>
+</tr>
+<tr>
+<td>FFN</td>
+<td>Feed-Forward Network（前馈 / 网络）</td>
+<td><a href="../lessons/14-functional-attention.html">第 14 章</a></td>
+</tr>
+<tr>
+<td>CE</td>
+<td>Cross-Entropy（交叉熵）</td>
+<td><a href="../lessons/15-loss-optimizer.html">第 15 章</a></td>
+</tr>
+<tr>
+<td>V</td>
+<td>vocabulary size（词表大小）</td>
+<td><a href="../lessons/15-loss-optimizer.html">第 15 章</a></td>
+</tr>
+<tr>
+<td>Adam</td>
+<td>Adaptive Moment estimation（自适应 / 矩 / 估计）</td>
+<td><a href="../lessons/15-loss-optimizer.html">第 15 章</a></td>
+</tr>
+<tr>
+<td>AdamW 的 W</td>
+<td>decoupled Weight decay（解耦的权重衰减）</td>
+<td><a href="../lessons/15-loss-optimizer.html">第 15 章</a></td>
+</tr>
+<tr>
+<td>wd</td>
+<td>weight decay</td>
+<td><a href="../lessons/15-loss-optimizer.html">第 15 章</a></td>
+</tr>
+<tr>
+<td>NLL</td>
+<td>Negative Log-Likelihood（负 / 对数 / 似然）</td>
+<td><a href="../lessons/15-loss-optimizer.html">第 15 章</a></td>
+</tr>
+<tr>
+<td>SPMD</td>
+<td>Single Program, Multiple Data（单 / 程序、多 / 数据）</td>
+<td><a href="../lessons/16-process-model.html">第 16 章</a></td>
+</tr>
+<tr>
+<td>NCCL</td>
+<td>NVIDIA Collective Communications Library（NVIDIA 集合 / 通信 / 库，读作 "nickel"）</td>
+<td><a href="../lessons/16-process-model.html">第 16 章</a></td>
+</tr>
+<tr>
+<td>Gloo</td>
+<td>Facebook 的 CPU 通信库（名字不是缩写）</td>
+<td><a href="../lessons/16-process-model.html">第 16 章</a></td>
+</tr>
+<tr>
+<td>c10d</td>
+<td>PyTorch 分布式通信层的名字（c10 + distributed）</td>
+<td><a href="../lessons/16-process-model.html">第 16 章</a></td>
+</tr>
+<tr>
+<td>rdzv</td>
+<td>rendezvous（会合，进程们互相找到对方）</td>
+<td><a href="../lessons/16-process-model.html">第 16 章</a></td>
+</tr>
+<tr>
+<td>K</td>
+<td>要通信的张量的元素个数</td>
+<td><a href="../lessons/17-collectives.html">第 17 章</a></td>
+</tr>
+<tr>
+<td>N</td>
+<td>参与的进程数（卡数）</td>
+<td><a href="../lessons/17-collectives.html">第 17 章</a></td>
+</tr>
+<tr>
+<td>DP / TP / PP / EP</td>
+<td>Data / Tensor / Pipeline / Expert Parallelism（数据 / 张量 / 流水线 / 专家 并行）</td>
+<td><a href="../lessons/17-collectives.html">第 17 章</a></td>
+</tr>
+<tr>
+<td>DDP</td>
+<td>DistributedDataParallel（分布式 / 数据 / 并行）</td>
+<td><a href="../lessons/18-ddp.html">第 18 章</a></td>
+</tr>
+<tr>
+<td>MB</td>
+<td>megabyte（兆字节）</td>
+<td><a href="../lessons/18-ddp.html">第 18 章</a></td>
+</tr>
+<tr>
+<td>ZeRO</td>
+<td>Zero Redundancy Optimizer（零 / 冗余 / 优化器）</td>
+<td><a href="../lessons/19-fsdp2.html">第 19 章</a></td>
+</tr>
+<tr>
+<td>FSDP</td>
+<td>Fully Sharded Data Parallel（完全 / 分片 / 数据并行）</td>
+<td><a href="../lessons/19-fsdp2.html">第 19 章</a></td>
+</tr>
+<tr>
+<td>HSDP</td>
+<td>Hybrid Sharded Data Parallel（混合 / 分片 / 数据并行）</td>
+<td><a href="../lessons/19-fsdp2.html">第 19 章</a></td>
+</tr>
+<tr>
+<td>Ψ（读"普赛"）</td>
+<td>参数个数</td>
+<td><a href="../lessons/19-fsdp2.html">第 19 章</a></td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(N_d\)</span></td>
+<td>数据并行的卡数（d = data）</td>
+<td><a href="../lessons/19-fsdp2.html">第 19 章</a></td>
+</tr>
+<tr>
+<td>TP</td>
+<td>Tensor Parallelism（张量 / 并行）</td>
+<td><a href="../lessons/20-dtensor-tp.html">第 20 章</a></td>
+</tr>
+<tr>
+<td>SP</td>
+<td>Sequence Parallelism（序列 / 并行）</td>
+<td><a href="../lessons/20-dtensor-tp.html">第 20 章</a></td>
+</tr>
+<tr>
+<td>DTensor</td>
+<td>Distributed Tensor（分布式 / 张量）</td>
+<td><a href="../lessons/20-dtensor-tp.html">第 20 章</a></td>
+</tr>
+<tr>
+<td>mesh（网格）</td>
+<td>把卡排成多维阵列</td>
+<td><a href="../lessons/20-dtensor-tp.html">第 20 章</a></td>
+</tr>
+<tr>
+<td>PP</td>
+<td>Pipeline Parallelism（流水线 / 并行）</td>
+<td><a href="../lessons/21-pp-cp-ep.html">第 21 章</a></td>
+</tr>
+<tr>
+<td>CP</td>
+<td>Context Parallelism（上下文 / 并行）</td>
+<td><a href="../lessons/21-pp-cp-ep.html">第 21 章</a></td>
+</tr>
+<tr>
+<td>EP</td>
+<td>Expert Parallelism（专家 / 并行）</td>
+<td><a href="../lessons/21-pp-cp-ep.html">第 21 章</a></td>
+</tr>
+<tr>
+<td>1F1B</td>
+<td>One Forward One Backward（一次前向、一次反向交替）</td>
+<td><a href="../lessons/21-pp-cp-ep.html">第 21 章</a></td>
+</tr>
+<tr>
+<td>p</td>
+<td>流水线段数</td>
+<td><a href="../lessons/21-pp-cp-ep.html">第 21 章</a></td>
+</tr>
+<tr>
+<td>m</td>
+<td>micro-batch 个数</td>
+<td><a href="../lessons/21-pp-cp-ep.html">第 21 章</a></td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(t_f\)</span> / <span class="arithmatex">\(t_b\)</span></td>
+<td>一个 micro-batch 前向 / 反向的时间</td>
+<td><a href="../lessons/21-pp-cp-ep.html">第 21 章</a></td>
+</tr>
+<tr>
+<td>DCP</td>
+<td>Distributed CheckPoint（分布式 / 检查点）</td>
+<td><a href="../lessons/22-dcp-debug.html">第 22 章</a></td>
+</tr>
+<tr>
+<td>hang</td>
+<td>卡死（程序不报错也不往前走）</td>
+<td><a href="../lessons/22-dcp-debug.html">第 22 章</a></td>
+</tr>
+<tr>
+<td>OOM</td>
+<td>Out Of Memory（显存不够）</td>
+<td><a href="../lessons/22-dcp-debug.html">第 22 章</a></td>
+</tr>
+<tr>
+<td>MFU</td>
+<td>Model FLOPs Utilization（模型 / 浮点运算 / 利用率）</td>
+<td><a href="../lessons/23-perf-method.html">第 23 章</a></td>
+</tr>
+<tr>
+<td>HFU</td>
+<td>Hardware FLOPs Utilization（硬件 / 浮点运算 / 利用率）</td>
+<td><a href="../lessons/23-perf-method.html">第 23 章</a></td>
+</tr>
+<tr>
+<td>FLOPS（末尾大写 S）</td>
+<td>FLOPs per second（每秒浮点运算次数）</td>
+<td><a href="../lessons/23-perf-method.html">第 23 章</a></td>
+</tr>
+<tr>
+<td>TFLOPS</td>
+<td>每秒万亿次（T = tera，10¹²）</td>
+<td><a href="../lessons/23-perf-method.html">第 23 章</a></td>
+</tr>
+<tr>
+<td>NVTX</td>
+<td>NVIDIA Tools Extension（NVIDIA / 工具 / 扩展，在代码里打标记）</td>
+<td><a href="../lessons/24-profiler.html">第 24 章</a></td>
+</tr>
+<tr>
+<td>trace（跟踪）</td>
+<td>带时间戳的事件记录</td>
+<td><a href="../lessons/24-profiler.html">第 24 章</a></td>
+</tr>
+<tr>
+<td>Nsight Systems</td>
+<td>NVIDIA 的系统级时间线分析工具</td>
+<td><a href="../lessons/24-profiler.html">第 24 章</a></td>
+</tr>
+<tr>
+<td>H2D</td>
+<td>Host to Device（主机到设备，CPU 内存拷进显存）</td>
+<td><a href="../lessons/25-input-sync.html">第 25 章</a></td>
+</tr>
+<tr>
+<td>memmap</td>
+<td>memory-mapped file（内存映射文件）</td>
+<td><a href="../lessons/25-input-sync.html">第 25 章</a></td>
+</tr>
+<tr>
+<td>fp32 / fp16</td>
+<td>32 / 16 位浮点（floating point）</td>
+<td><a href="../lessons/26-mixed-precision.html">第 26 章</a></td>
+</tr>
+<tr>
+<td>TF32</td>
+<td>TensorFloat-32（NVIDIA 张量核心用的 19 位格式）</td>
+<td><a href="../lessons/26-mixed-precision.html">第 26 章</a></td>
+</tr>
+<tr>
+<td>FP8</td>
+<td>8 位浮点，E4M3 / E5M2 = 指数（Exponent）4 位尾数（Mantissa）3 位 / 指数 5 位尾数 2 位</td>
+<td><a href="../lessons/26-mixed-precision.html">第 26 章</a></td>
+</tr>
+<tr>
+<td>AC</td>
+<td>Activation Checkpointing（激活 / 检查点，也叫重计算 recomputation）</td>
+<td><a href="../lessons/27-memory.html">第 27 章</a></td>
+</tr>
+<tr>
+<td>b</td>
+<td>micro-batch 大小，s = 序列长度，h = 隐藏维度，L = 层数</td>
+<td><a href="../lessons/27-memory.html">第 27 章</a></td>
+</tr>
+<tr>
+<td>CUDA Graph</td>
+<td>把一串 GPU 操作录成一张图、之后一次性重放</td>
+<td><a href="../lessons/28-compile-graphs.html">第 28 章</a></td>
+</tr>
+<tr>
+<td>launch（启动）</td>
+<td>CPU 告诉 GPU 执行一个 kernel</td>
+<td><a href="../lessons/28-compile-graphs.html">第 28 章</a></td>
+</tr>
+<tr>
+<td>cudagraph trees</td>
+<td>PyTorch 管理多张 CUDA 图的机制</td>
+<td><a href="../lessons/28-compile-graphs.html">第 28 章</a></td>
+</tr>
+<tr>
+<td>AI</td>
+<td>Arithmetic Intensity（算术强度，每读写 1 字节做几次运算，注意不是人工智能）</td>
+<td><a href="../lessons/29-why-fusion.html">第 29 章</a></td>
+</tr>
+<tr>
+<td>HBM</td>
+<td>High Bandwidth Memory（高带宽显存）</td>
+<td><a href="../lessons/29-why-fusion.html">第 29 章</a></td>
+</tr>
+<tr>
+<td>GEMM</td>
+<td>GEneral Matrix Multiply（通用矩阵乘）</td>
+<td><a href="../lessons/29-why-fusion.html">第 29 章</a></td>
+</tr>
+<tr>
+<td>ridge point（拐点）</td>
+<td>屋顶线上斜坡和平顶的交点</td>
+<td><a href="../lessons/29-why-fusion.html">第 29 章</a></td>
+</tr>
+<tr>
+<td>KV</td>
+<td>Key / Value（注意力里的键和值）</td>
+<td><a href="../lessons/30-inference-mode.html">第 30 章</a></td>
+</tr>
+<tr>
+<td>prefill（预填充）</td>
+<td>一次性处理整段提示词</td>
+<td><a href="../lessons/30-inference-mode.html">第 30 章</a></td>
+</tr>
+<tr>
+<td>decode（解码）</td>
+<td>之后一个一个生成 token</td>
+<td><a href="../lessons/30-inference-mode.html">第 30 章</a></td>
+</tr>
+<tr>
+<td>GQA</td>
+<td>Grouped-Query Attention（分组 / 查询 / 注意力）</td>
+<td><a href="../lessons/30-inference-mode.html">第 30 章</a></td>
+</tr>
+<tr>
+<td>tok/s</td>
+<td>tokens per second</td>
+<td><a href="../lessons/30-inference-mode.html">第 30 章</a></td>
+</tr>
+<tr>
+<td>Inductor</td>
+<td>TorchInductor，<code>torch.compile</code> 的代码生成后端</td>
+<td><a href="../lessons/31-read-inductor.html">第 31 章</a></td>
+</tr>
+<tr>
+<td>extern kernel（外部 kernel）</td>
+<td>Inductor 不自己生成、直接调用的库函数（如 cuBLAS 的矩阵乘）</td>
+<td><a href="../lessons/31-read-inductor.html">第 31 章</a></td>
+</tr>
+<tr>
+<td>Metal</td>
+<td>Apple 的 GPU 编程接口</td>
+<td><a href="../lessons/31-read-inductor.html">第 31 章</a></td>
+</tr>
+<tr>
+<td>DSL</td>
+<td>Domain-Specific Language（领域 / 专用 / 语言）</td>
+<td><a href="../lessons/32-triton-model.html">第 32 章</a></td>
+</tr>
+<tr>
+<td>SIMT</td>
+<td>Single Instruction, Multiple Threads（CUDA 的线程模型）</td>
+<td><a href="../lessons/32-triton-model.html">第 32 章</a></td>
+</tr>
+<tr>
+<td><code>tl</code></td>
+<td><code>triton.language</code></td>
+<td><a href="../lessons/32-triton-model.html">第 32 章</a></td>
+</tr>
+<tr>
+<td>constexpr</td>
+<td>constant expression（编译期常量）</td>
+<td><a href="../lessons/32-triton-model.html">第 32 章</a></td>
+</tr>
+<tr>
+<td>op</td>
+<td>operator（算子）</td>
+<td><a href="../lessons/33-custom-op.html">第 33 章</a></td>
+</tr>
+<tr>
+<td>fake tensor（假张量）</td>
+<td>只有形状、dtype、设备，没有数据的张量（第 3 章 Meta 设备的同类）</td>
+<td><a href="../lessons/33-custom-op.html">第 33 章</a></td>
+</tr>
+<tr>
+<td>schema（签名）</td>
+<td>算子的参数和返回值类型声明</td>
+<td><a href="../lessons/33-custom-op.html">第 33 章</a></td>
+</tr>
+<tr>
+<td>ATen</td>
+<td>A Tensor library（PyTorch 的 C++ 张量库，<code>at::</code> 命名空间）</td>
+<td><a href="../lessons/34-cpp-extension.html">第 34 章</a></td>
+</tr>
+<tr>
+<td>ABI</td>
+<td>Application Binary Interface（应用 / 二进制 / 接口）</td>
+<td><a href="../lessons/34-cpp-extension.html">第 34 章</a></td>
+</tr>
+<tr>
+<td><code>-O3</code></td>
+<td>编译器最高一档常规优化</td>
+<td><a href="../lessons/34-cpp-extension.html">第 34 章</a></td>
+</tr>
+<tr>
+<td>CUTLASS</td>
+<td>CUDA Templates for Linear Algebra Subroutines（NVIDIA 的线性代数模板库）</td>
+<td><a href="../lessons/34-cpp-extension.html">第 34 章</a></td>
+</tr>
+<tr>
+<td>int8 / int4</td>
+<td>8 / 4 位整数</td>
+<td><a href="../lessons/35-quant-export.html">第 35 章</a></td>
+</tr>
+<tr>
+<td>PTQ</td>
+<td>Post-Training Quantization（训练后 / 量化）</td>
+<td><a href="../lessons/35-quant-export.html">第 35 章</a></td>
+</tr>
+<tr>
+<td>QAT</td>
+<td>Quantization-Aware Training（量化 / 感知 / 训练）</td>
+<td><a href="../lessons/35-quant-export.html">第 35 章</a></td>
+</tr>
+<tr>
+<td><code>.pt2</code></td>
+<td>PyTorch 2 的导出包格式</td>
+<td><a href="../lessons/35-quant-export.html">第 35 章</a></td>
+</tr>
+<tr>
+<td>ExecuTorch</td>
+<td>PyTorch 的端侧（手机、嵌入式）运行时</td>
+<td><a href="../lessons/35-quant-export.html">第 35 章</a></td>
+</tr>
+<tr>
+<td>IQR</td>
+<td>InterQuartile Range（四分位距：中间 50% 数据的范围，衡量波动）</td>
+<td><a href="../lessons/36-bench-correctness.html">第 36 章</a></td>
+</tr>
+<tr>
+<td>rtol / atol</td>
+<td>relative / absolute tolerance（相对 / 绝对 容差）</td>
+<td><a href="../lessons/36-bench-correctness.html">第 36 章</a></td>
+</tr>
+<tr>
+<td>CI</td>
+<td>Continuous Integration（持续集成）</td>
+<td><a href="../lessons/36-bench-correctness.html">第 36 章</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="_3">术语（不是缩写，但反复出现）</h2>
+<table>
+<thead>
+<tr>
+<th>术语</th>
+<th>意思</th>
+<th>第一次讲</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>storage / stride / offset</td>
+<td>张量的一排数 / 每维走一步跳几格 / 从第几格开始</td>
+<td><a href="../lessons/02-tensor-stride.html">第 2 章</a></td>
+</tr>
+<tr>
+<td>view / contiguous</td>
+<td>只改说明书不复制的张量 / 按行紧密排列</td>
+<td><a href="../lessons/02-tensor-stride.html">第 2 章</a></td>
+</tr>
+<tr>
+<td>dispatch key（分派键）</td>
+<td>张量身上的标签，决定一次调用经过哪些处理层</td>
+<td><a href="../lessons/03-dispatcher.html">第 3 章</a></td>
+</tr>
+<tr>
+<td>redispatch（再分派）</td>
+<td>一层处理完去掉自己的标签再交给分派器</td>
+<td><a href="../lessons/03-dispatcher.html">第 3 章</a></td>
+</tr>
+<tr>
+<td>Meta / fake tensor</td>
+<td>只有形状没有数据的张量，用来推形状</td>
+<td><a href="../lessons/03-dispatcher.html">第 3 章</a></td>
+</tr>
+<tr>
+<td>计算图 / 叶子 / grad_fn</td>
+<td>前向记下的账本 / 自己创建的张量 / 算出这个张量的那一笔</td>
+<td><a href="../lessons/04-autograd.html">第 4 章</a></td>
+</tr>
+<tr>
+<td>kernel / launch</td>
+<td>GPU 上跑的一个函数 / CPU 把它挂进队列</td>
+<td><a href="../lessons/05-cuda-semantics.html">第 5 章</a></td>
+</tr>
+<tr>
+<td>同步点</td>
+<td>CPU 必须等 GPU 做完才能往下走的写法</td>
+<td><a href="../lessons/05-cuda-semantics.html">第 5 章</a></td>
+</tr>
+<tr>
+<td>stream / pinned memory</td>
+<td>GPU 上的一条队列 / 锁页内存，异步拷贝要用</td>
+<td><a href="../lessons/05-cuda-semantics.html">第 5 章</a></td>
+</tr>
+<tr>
+<td>caching allocator（缓存分配器）</td>
+<td>PyTorch 自己的显存仓库，用完不还驱动</td>
+<td><a href="../lessons/05-cuda-semantics.html">第 5 章</a></td>
+</tr>
+<tr>
+<td>eager / graph</td>
+<td>写一行跑一行 / 先抓成图再整体优化</td>
+<td><a href="../lessons/06-compile-stack.html">第 6 章</a></td>
+</tr>
+<tr>
+<td>graph break（断图） / guards / recompile</td>
+<td>Dynamo 抄不下去切断图 / 复用编译结果的条件 / 条件不满足时重编译</td>
+<td><a href="../lessons/06-compile-stack.html">第 6 章</a></td>
+</tr>
+<tr>
+<td>融合（fusion）</td>
+<td>把多个算子合成一个 kernel，中间结果不落显存</td>
+<td><a href="../lessons/06-compile-stack.html">第 6 章</a></td>
+</tr>
+<tr>
+<td>state_dict / FQN</td>
+<td>名字 → 张量的清单 / 在模块树上的完整路径名</td>
+<td><a href="../lessons/07-nn-module.html">第 7 章</a></td>
+</tr>
+<tr>
+<td>hook</td>
+<td>模块前向 / 反向前后自动调用的函数</td>
+<td><a href="../lessons/07-nn-module.html">第 7 章</a></td>
+</tr>
+<tr>
+<td>collate / sampler</td>
+<td>把一组样本拼成 batch / 决定取样顺序</td>
+<td><a href="../lessons/08-dataloader.html">第 8 章</a></td>
+</tr>
+<tr>
+<td>warmup / cosine</td>
+<td>学习率先线性升 / 再按余弦降</td>
+<td><a href="../lessons/09-training-loop.html">第 9 章</a></td>
+</tr>
+<tr>
+<td>广播（broadcasting）</td>
+<td>形状从右对齐，1 可以拉伸成任意长</td>
+<td><a href="../lessons/11-shape-broadcast.html">第 11 章</a></td>
+</tr>
+<tr>
+<td>logsumexp</td>
+<td>先减最大值再算 log Σ exp，防溢出</td>
+<td><a href="../lessons/13-reduce-matmul.html">第 13 章</a></td>
+</tr>
+<tr>
+<td>SPMD / rank / world_size / local_rank</td>
+<td>同一份脚本跑 N 份 / 全局编号 / 总数 / 本机编号</td>
+<td><a href="../lessons/16-process-model.html">第 16 章</a></td>
+</tr>
+<tr>
+<td>集合通信</td>
+<td>all_reduce、all_gather、reduce_scatter、broadcast、all_to_all</td>
+<td><a href="../lessons/17-collectives.html">第 17 章</a></td>
+</tr>
+<tr>
+<td>bucket（桶）</td>
+<td>DDP 把梯度按反向顺序装桶，满一桶通信一次</td>
+<td><a href="../lessons/18-ddp.html">第 18 章</a></td>
+</tr>
+<tr>
+<td>ZeRO-1/2/3 / 分片（shard）</td>
+<td>把优化器状态 / 梯度 / 参数切到各卡</td>
+<td><a href="../lessons/19-fsdp2.html">第 19 章</a></td>
+</tr>
+<tr>
+<td>DeviceMesh / DTensor / placement</td>
+<td>把卡排成表格 / 分布在 mesh 上的张量 / Shard、Replicate、Partial</td>
+<td><a href="../lessons/20-dtensor-tp.html">第 20 章</a></td>
+</tr>
+<tr>
+<td>Colwise / Rowwise</td>
+<td>张量并行的按列切 / 按行切</td>
+<td><a href="../lessons/20-dtensor-tp.html">第 20 章</a></td>
+</tr>
+<tr>
+<td>气泡（bubble） / micro-batch</td>
+<td>流水线里卡在等的时间 / 一个 batch 切出的小批</td>
+<td><a href="../lessons/21-pp-cp-ep.html">第 21 章</a></td>
+</tr>
+<tr>
+<td>hang（卡死）</td>
+<td>进程不报错也不往前走，多半是集合通信对不上</td>
+<td><a href="../lessons/22-dcp-debug.html">第 22 章</a></td>
+</tr>
+<tr>
+<td>MFU / HFU</td>
+<td>模型必需 / 硬件实际做的运算占峰值的比例</td>
+<td><a href="../lessons/23-perf-method.html">第 23 章</a></td>
+</tr>
+<tr>
+<td>Self / Total（profiler）</td>
+<td>函数自己的时间 / 含子函数的时间</td>
+<td><a href="../lessons/24-profiler.html">第 24 章</a></td>
+</tr>
+<tr>
+<td>loss scaling</td>
+<td>把 loss 放大让小梯度不下溢，fp16 用</td>
+<td><a href="../lessons/26-mixed-precision.html">第 26 章</a></td>
+</tr>
+<tr>
+<td>激活重计算（checkpoint）</td>
+<td>只存块输入，反向时重算中间结果</td>
+<td><a href="../lessons/27-memory.html">第 27 章</a></td>
+</tr>
+<tr>
+<td>CUDA Graph</td>
+<td>把一串 kernel 录成一张图，一次 launch 重放</td>
+<td><a href="../lessons/28-compile-graphs.html">第 28 章</a></td>
+</tr>
+<tr>
+<td>roofline / 算术强度 / 拐点</td>
+<td>算力与带宽的上限图 / FLOP 每字节 / 峰值 ÷ 带宽</td>
+<td><a href="../lessons/29-why-fusion.html">第 29 章</a></td>
+</tr>
+<tr>
+<td>访存受限 / 算力受限</td>
+<td>时间由读写字节决定 / 由运算次数决定</td>
+<td><a href="../lessons/29-why-fusion.html">第 29 章</a></td>
+</tr>
+<tr>
+<td>KV cache / prefill / decode</td>
+<td>存下旧 token 的 K、V / 处理提示词 / 逐个生成</td>
+<td><a href="../lessons/30-inference-mode.html">第 30 章</a></td>
+</tr>
+<tr>
+<td>program / mask（Triton）</td>
+<td>一个处理一块数据的实例 / 挡越界的真假向量</td>
+<td><a href="../lessons/32-triton-model.html">第 32 章</a></td>
+</tr>
+<tr>
+<td>schema / custom op</td>
+<td>算子签名 / 注册进分派表的自定义算子</td>
+<td><a href="../lessons/33-custom-op.html">第 33 章</a></td>
+</tr>
+<tr>
+<td>量化 / 缩放系数（scale）</td>
+<td>用整数近似浮点 / 一格代表多大</td>
+<td><a href="../lessons/35-quant-export.html">第 35 章</a></td>
+</tr>
+<tr>
+<td>有效带宽</td>
+<td>必须读写的字节 ÷ 实测时间</td>
+<td><a href="../lessons/36-bench-correctness.html">第 36 章</a></td>
+</tr>
+</tbody>
+</table>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

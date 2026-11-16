@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 24 章 · profiler：给训练拍一段&quot;录像&quot; · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="24-profiler">第 24 章 · profiler：给训练拍一段"录像"</h1><p><a class="btn" href="../animations/24-trace.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：<code>torch.profiler</code> 怎么用？输出的表格里 Self 和 Total 有什么区别？时间线（trace）上该找什么？用一次真实的测量，看"改一处、再测"怎么走一遍。<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/23-perf-method.html">第 23 章 调优方法论</a> · 下一章：<a href="../lessons/25-input-sync.html">第 25 章 数据管道与同步点</a><br />
+对应原文：AISPE ch13「使用 PyTorch 分析器识别瓶颈」（<code>ch13.md</code> 第 131–291 行）、「Nsight Systems 与 NVTX 时间线」（第 292–380 行）、NVTX 标记（第 19–130 行）；官方教程「PyTorch Profiler」（〔在线〕）；本章表格和数字是本机 Mac CPU 上 torch 2.15.0 实测</p>
+<p>本章缩写：NVTX = NVIDIA Tools Extension（NVIDIA / 工具 / 扩展，在代码里打标记）；trace（跟踪）= 带时间戳的事件记录；Nsight Systems = NVIDIA 的系统级时间线分析工具；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="2026-11-14">第一步：怎么录——一个模板（2026-11-14）</h3>
+<p><strong>类比：体育教练看比赛录像。</strong> 光看比分（总时间）不知道输在哪；回放录像，才看得到哪个回合在发呆、哪个动作慢。</p>
+<pre><code class="language-python">from torch.profiler import profile, ProfilerActivity, schedule, record_function
+
+with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],   # Mac 上只有 CPU
+             schedule=schedule(wait=1, warmup=1, active=3),              # 跳 1 步、热身 1 步、录 3 步
+             record_shapes=True, profile_memory=True, with_stack=True) as prof:
+    for _ in range(5):
+        with record_function(&quot;train_step&quot;):          # 自己给一段代码起名字，时间线上能看到
+            train_step()
+        prof.step()                                  # 告诉 profiler 一步结束了
+
+print(prof.key_averages().table(sort_by=&quot;self_cpu_time_total&quot;, row_limit=10))
+prof.export_chrome_trace(&quot;trace.json&quot;)               # 拖进 ui.perfetto.dev 看时间线
+</code></pre>
+<p><code>schedule</code> 的意义（第 23 章纪律 3）：前几步有编译、热身、分配显存，<strong>不能录</strong>；只录稳定后的几步。</p>
+<p><strong>一句话</strong>：profile + schedule 跳过热身只录稳定步；record_function 给代码段命名；导出 trace 看时间线。</p>
+<h3 id="self-total2026-11-14">第二步：读表——Self 和 Total（2026-11-14）</h3>
+<p>本机实测：一个 Linear → GELU → Linear → LayerNorm 的小 MLP，batch 64，AdamW（默认实现），录 3 步：</p>
+<pre><code>Name                        Self CPU %   Self CPU   CPU total %   CPU total   # of Calls
+aten::mm                      17.69%     1.431ms      17.70%      1.432ms        9
+aten::addmm                   12.88%     1.042ms      13.83%      1.118ms        6
+aten::mul_                     8.91%   720.617us       9.43%    762.426us       36
+aten::lerp_                    6.30%   509.670us       6.30%    509.670us       18
+Optimizer.step#AdamW.step      5.96%   481.952us      47.74%      3.861ms        3
+aten::addcdiv_                 5.95%   481.092us       5.95%    481.092us       18
+train_step                     5.33%   431.019us      99.47%      8.045ms        3
+...
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>列</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Self</strong></td>
+<td>这个函数<strong>自己</strong>花的时间，不含它调用的子函数</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td>包含它调用的所有子函数</td>
+</tr>
+<tr>
+<td># of Calls</td>
+<td>录的这几步里一共调用了几次</td>
+</tr>
+</tbody>
+</table>
+<p>怎么读这张表：</p>
+<ul>
+<li><code>train_step</code> 的 Total 是 99%（它包住了一切），Self 只有 5%：本身不干活，只是个"文件夹"；</li>
+<li><strong><code>Optimizer.step</code> 的 Total 是 47.7%</strong>：优化器更新占了一步的<strong>将近一半</strong>！它的 Self 只有 6%，时间花在下面一堆小算子里：<code>mul_</code>（36 次）、<code>lerp_</code>、<code>addcdiv_</code>、<code>sqrt</code>……都是 AdamW 公式里的逐元素运算（第 15 章），每个参数张量各发一遍；</li>
+<li><code>aten::mm</code> / <code>addmm</code> 是矩阵乘（前向和反向），这才是"有用的"计算。</li>
+</ul>
+<p><strong>规律</strong>：按 Self 排序找"谁在真正花时间"，按 Total 排序找"哪一大块代码慢"。</p>
+<p><strong>一句话</strong>：Self 是自己干的、Total 含子函数；一个小 Total 大 Self 小的条目，说明它下面有一堆碎活。</p>
+<h3 id="2026-11-14_1">第三步：改一处、再测（2026-11-14）</h3>
+<p>诊断：AdamW 的默认实现给每个参数张量发一串小算子，碎而多。第 15 章说过 <code>fused=True</code> 把整个更新公式合成一个 kernel。<strong>只改这一处</strong>：</p>
+<pre><code class="language-python">opt = torch.optim.AdamW(model.parameters(), fused=True)
+</code></pre>
+<p><strong>实测</strong>（各录 10 步取平均）：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>每步总时间</th>
+<th>其中优化器</th>
+<th>优化器占比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>默认</td>
+<td>2.61 ms</td>
+<td>1.25 ms</td>
+<td>47.9%</td>
+</tr>
+<tr>
+<td><code>fused=True</code></td>
+<td>1.82 ms</td>
+<td>0.51 ms</td>
+<td>27.9%</td>
+</tr>
+</tbody>
+</table>
+<p>一行改动，每步快了 30%。（这是 CPU 上的数；GPU 上 kernel 启动开销更大，fused 的收益通常更明显。）然后回到第一步：现在最大的块是什么？—— matmul 了，那就该看第 26 章的精度和形状。</p>
+<p><strong>一句话</strong>：找到最大的块 → 只改它 → 再测；默认 AdamW 在小模型上可能占一半时间，fused 一行解决。</p>
+<h3 id="2026-11-14_2">第四步：读时间线——找空白、找碎块、找等待（2026-11-14）</h3>
+<p>表格是"总账"，时间线是"录像"。把 <code>trace.json</code> 拖进 ui.perfetto.dev（或 <code>chrome://tracing</code>），GPU 训练时能看到 CPU 线程和 GPU stream 两排：</p>
+<table>
+<thead>
+<tr>
+<th>时间线上看到</th>
+<th>说明什么</th>
+<th>去哪章</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GPU 那排有大段<strong>空白</strong></td>
+<td>GPU 在等：数据、同步点、CPU 下单太慢</td>
+<td>第 25 章</td>
+</tr>
+<tr>
+<td>CPU 那排有长条 <code>cudaStreamSynchronize</code> / <code>aten::item</code></td>
+<td>同步点，CPU 在等 GPU</td>
+<td>第 5、25 章</td>
+</tr>
+<tr>
+<td>GPU 上<strong>密密麻麻的细条</strong></td>
+<td>很多小 kernel，启动开销占比高</td>
+<td>第 28 章（compile / CUDA Graph）</td>
+</tr>
+<tr>
+<td>很多 <code>elementwise</code> / <code>vectorized_*</code> kernel</td>
+<td>访存受限的逐元素运算</td>
+<td>第 29 章（融合）</td>
+</tr>
+<tr>
+<td><code>ncclKernel_*</code> 长条，且和计算不重叠</td>
+<td>通信没藏住</td>
+<td>第 18–21 章</td>
+</tr>
+<tr>
+<td>内存曲线（<code>profile_memory=True</code>）尖峰</td>
+<td>激活或临时张量占显存</td>
+<td>第 27 章</td>
+</tr>
+</tbody>
+</table>
+<p><strong>更底层的工具</strong>：Nsight Systems（<code>nsys profile python train.py</code>）能看到 CPU、GPU、NCCL、内存拷贝、操作系统调度的统一时间线；在代码里用 <code>torch.cuda.nvtx.range_push("forward")</code> / <code>range_pop()</code> 打标记，时间线上就有自己命名的区间（AISPE ch13 第 19–130 行、第 292–380 行）。单个 kernel 的细节（访存效率、占用率）用 Nsight Compute（CUDA 讲义第 9 章）。</p>
+<p><strong>一句话</strong>：时间线上找空白（在等）、找细碎条（太碎）、找没重叠的 NCCL；更细用 Nsight Systems + NVTX。</p>
+<h3 id="_2">动画演示：读一段时间线</h3>
+<p><img alt="profiler 时间线" src="../animations/24-trace.gif" /></p>
+<p>可交互版：<a href="../animations/24-trace.html">animations/24-trace.html</a>。开关：<strong>AdamW 默认 / fused</strong>。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>一步训练画成一条时间线：前向、反向、优化器三段，按本章实测的比例；</li>
+<li>默认 AdamW：优化器段是一长串细碎的小块（每个参数张量一串 mul_ / lerp_ / addcdiv_ …）；</li>
+<li>切到 fused：优化器段变成一大块，总长度变短；下方显示每步时间 2.61 → 1.82 ms。</li>
+</ol>
+<h2 id="_3">练习与作答记录</h2>
+<p><strong>题 1</strong>：profiler 表里某函数 Self CPU 是 0.2 ms，CPU total 是 6 ms。这说明什么？下一步应该看什么？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：为什么 <code>schedule(wait=1, warmup=1, active=3)</code> 要先 wait 和 warmup，而不是从第一步就开始录？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：GPU 训练的时间线上，GPU 那一排每一步末尾都有一段 5 ms 的空白，CPU 那一排同一位置是一个 <code>aten::item</code>。这是什么问题？怎么改？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_4">口诀</h2>
+<blockquote>
+<p>profile 加 schedule，跳过热身只录稳定步；record_function 起名字，trace 拖进 perfetto；<br />
+Self 是自己干、Total 含子孙，Total 大 Self 小底下全是碎活；<br />
+找最大的块改一处再测；时间线上找空白、找细条、找没藏住的 NCCL。</p>
+</blockquote>
+<h2 id="_5">本章复习卡片</h2>
+<ul>
+<li>P83（profiler 模板：activities、schedule(wait, warmup, active)、record_function、export_chrome_trace）</li>
+<li>P84（Self vs Total；实测默认 AdamW 占一步 47.7%，下面是 mul_ / lerp_ / addcdiv_ 碎算子）</li>
+<li>P85（改一处再测：fused=True 每步 2.61 → 1.82 ms、优化器 1.25 → 0.51 ms）</li>
+<li>P86（时间线六种现象对应的问题；Nsight Systems + NVTX）</li>
+</ul>
+<h2 id="_6">附录 · 延伸阅读</h2>
+<h3 id="_7">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ AISPE 第 13 章</td>
+<td><code>ch13.md</code> 第 131–291 行（PyTorch profiler 实战）、第 292–380 行（Nsight Systems + NVTX）</td>
+<td>带 GPU 截图的完整分析流程</td>
+</tr>
+<tr>
+<td>★ 官方教程「PyTorch Profiler」与「Profiling your PyTorch Module」</td>
+<td>全文（〔在线〕）</td>
+<td>所有参数、TensorBoard 插件</td>
+</tr>
+<tr>
+<td>Ultra-Scale Playbook §A1</td>
+<td><code>ultrascale-playbook.md</code> 第 3624–3748 行</td>
+<td>分布式训练的 trace 怎么看</td>
+</tr>
+<tr>
+<td>CUDA 讲义 第 9 章 roofline 与 profiling</td>
+<td>全章</td>
+<td>单个 kernel 用 Nsight Compute 怎么分析</td>
+</tr>
+<tr>
+<td>Perfetto UI</td>
+<td>ui.perfetto.dev（〔在线〕）</td>
+<td>打开 trace.json</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">数学原理</h3>
+<ul>
+<li><strong>Amdahl 定律</strong>：某部分占总时间比例 <span class="arithmatex">\(p\)</span>，把它加速 <span class="arithmatex">\(s\)</span> 倍，总加速比 <span class="arithmatex">\(\frac{1}{(1-p) + p/s}\)</span>。优化器占 47.9%、加速约 2.45 倍（1.25 → 0.51 ms）：<span class="arithmatex">\(\frac{1}{0.521 + 0.479/2.45} ≈ 1.40\)</span>，和实测 2.61 / 1.82 ≈ 1.43 吻合。<strong>先改占比大的</strong>就是这个公式的结论。</li>
+</ul>
+<h3 id="_9">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>profile(activities, schedule, record_shapes, profile_memory, with_stack)</code></td>
+<td>录</td>
+</tr>
+<tr>
+<td><code>prof.key_averages(group_by_input_shape=True).table(sort_by=...)</code></td>
+<td>汇总表</td>
+</tr>
+<tr>
+<td><code>prof.export_chrome_trace(path)</code></td>
+<td>导出时间线</td>
+</tr>
+<tr>
+<td><code>torch.cuda.nvtx.range_push / range_pop</code> + <code>nsys profile</code></td>
+<td>Nsight 标记</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(\frac{1}{(1-p) + p/s}\)</span></td>
+<td>Amdahl 定律</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_10">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch24_profiler.py</code>，配套测试 <code>tests/test_ch23_28.py</code>；同一章的 notebook：<code>notebooks/ch24_profiler.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch24_profiler.py   # 一步一步打印  
+uv run pytest tests/test_ch23_28.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第二步 读表</td>
+<td>Self 前几名</td>
+<td><code>profile_step(False)</code> 的 top</td>
+<td>mm、addmm、mul_、addcdiv_、lerp_</td>
+</tr>
+<tr>
+<td>第三步 改一处</td>
+<td>fused AdamW</td>
+<td><code>profile_step(False / True)</code></td>
+<td>每步约 2.5 → 1.8 ms，优化器约 1.2 → 0.5 ms</td>
+</tr>
+<tr>
+<td>附录 Amdahl</td>
+<td>1 / ((1−p) + p/s)</td>
+<td><code>amdahl(0.479, 2.45)</code></td>
+<td>1.40</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">with profile(activities=[ProfilerActivity.CPU], schedule=schedule(wait=1, warmup=2, active=10)) as prof:
+    for _ in range(13): step(); prof.step()
+next(e for e in prof.key_averages() if e.key.startswith(&quot;Optimizer.step&quot;))
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong>每次测的数略有不同</strong>：讲义里是 2.61 / 1.82 ms，测试只核对"fused 更快"。</li>
+<li><strong>fused 后 top 里出现 <code>aten::_fused_adamw_</code></strong>：一个 kernel 顶替了一串小算子。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把 batch 从 64 改成 1024，看优化器占比怎么变。</li>
+<li>用 <code>prof.export_chrome_trace("t.json")</code> 导出，拖进 ui.perfetto.dev 看。</li>
+</ul><nav class="pager"><a href="23-perf-method.html">← 第 23 章 · 调优方法论：先算账，再测量，只改瓶颈</a><a href="25-input-sync.html">第 25 章 · 让 GPU 别等：数据管道与同步点 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 29 章 · 为什么融合能变快：算力受限与访存受限 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="29">第 29 章 · 为什么融合能变快：算力受限与访存受限</h1><p><a class="btn" href="../animations/29-roofline.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：同样是一个 kernel，为什么矩阵乘法"算得满"、加法和 GELU 却"算不满"？roofline（屋顶线）图怎么读？融合到底省了什么，能快多少？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/28-compile-graphs.html">第 28 章 compile 与 CUDA Graphs</a> · 下一章：<a href="../lessons/30-inference-mode.html">第 30 章 推理模式与 KV cache</a><br />
+对应原文：AISPE ch13「GEMM 的内核 Roofline 分析」（<code>ch13.md</code> 第 381–444 行）；Ultra-Scale Playbook §How to improve performance with Kernels / Fused Kernels（<code>ultrascale-playbook.md</code> 第 2405 行、第 2711 行）；CUDA 讲义 第 9 章 roofline；Williams et al. 2009「Roofline」（〔在线〕）；本章计时是本机 Apple M 系列 GPU（MPS）上 torch 2.15.0 实测</p>
+<p>本章缩写：AI = Arithmetic Intensity（算术强度，每读写 1 字节做几次运算，注意不是人工智能）；HBM = High Bandwidth Memory（高带宽显存）；GEMM = GEneral Matrix Multiply（通用矩阵乘）；ridge point（拐点）= 屋顶线上斜坡和平顶的交点；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="kernel-2026-11-14">第一步：一个 kernel 的两笔账（2026-11-14）</h3>
+<p>一个 kernel 的时间至少是下面两者中<strong>较大</strong>的那个：</p>
+<div class="arithmatex">\[t \ge \max\left(\frac{\text{运算次数}}{\text{峰值算力}},\ \frac{\text{读写字节数}}{\text{显存带宽}}\right)\]</div>
+<p><strong>类比：餐厅。</strong> 厨师炒得再快（算力），食材从仓库搬来的速度（带宽）跟不上也白搭；反过来食材堆满了，厨师手慢也没用。哪边慢，哪边就是瓶颈。</p>
+<p><strong>算术强度</strong> <span class="arithmatex">\(I = \frac{\text{运算次数}}{\text{读写字节数}}\)</span>。硬件也有一个"平衡点"：<span class="arithmatex">\(\frac{\text{峰值算力}}{\text{带宽}}\)</span>，叫<strong>拐点</strong>。</p>
+<ul>
+<li><span class="arithmatex">\(I\)</span> 低于拐点 → <strong>访存受限</strong>（memory-bound）：时间由搬数据决定；</li>
+<li><span class="arithmatex">\(I\)</span> 高于拐点 → <strong>算力受限</strong>（compute-bound）：时间由计算决定。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>硬件</th>
+<th>峰值（bf16 稠密）</th>
+<th>带宽</th>
+<th>拐点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>H100 SXM</td>
+<td>989 TFLOPS</td>
+<td>3.35 TB/s</td>
+<td>约 295 FLOP/字节</td>
+</tr>
+<tr>
+<td>本机 M 系列 GPU（实测）</td>
+<td>约 13.7 TFLOPS（fp32 matmul）</td>
+<td>约 470 GB/s</td>
+<td>约 29 FLOP/字节</td>
+</tr>
+</tbody>
+</table>
+<p><strong>一句话</strong>：时间 = max(算的时间, 搬的时间)；算术强度低于拐点就是访存受限。</p>
+<h3 id="2026-11-14">第二步：几种常见算子落在哪（2026-11-14）</h3>
+<table>
+<thead>
+<tr>
+<th>算子（fp32）</th>
+<th>每个元素</th>
+<th>算术强度</th>
+<th>H100 上</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>x + y</code></td>
+<td>1 次运算；读 2 个、写 1 个 = 12 字节</td>
+<td>≈ 0.08</td>
+<td>远低于 295：访存受限</td>
+</tr>
+<tr>
+<td>GELU</td>
+<td>约 10 次；读 1 写 1 = 8 字节</td>
+<td>≈ 1</td>
+<td>访存受限</td>
+</tr>
+<tr>
+<td>LayerNorm / softmax</td>
+<td>每元素几次，但要读两遍</td>
+<td>≈ 1–2</td>
+<td>访存受限</td>
+</tr>
+<tr>
+<td>矩阵乘 n × n × n（bf16）</td>
+<td><span class="arithmatex">\(2n^3\)</span> 次；读写约 <span class="arithmatex">\(3n^2 \times 2\)</span> 字节</td>
+<td><span class="arithmatex">\(\frac{n}{3}\)</span>；n = 4096 时 ≈ 1365</td>
+<td>算力受限</td>
+</tr>
+</tbody>
+</table>
+<p><strong>结论</strong>：Transformer 里<strong>矩阵乘</strong>算力受限，靠 Tensor Core 和低精度（第 26 章）；<strong>其余几乎所有算子</strong>（加偏置、激活、残差、norm、softmax、dropout、RoPE……）都是访存受限的，<strong>它们的时间只取决于读写了多少字节</strong>。</p>
+<p><strong>一句话</strong>：矩阵乘算力受限，其余逐元素、规约算子几乎全是访存受限，时间只看读写字节数。</p>
+<h3 id="2026-11-14_1">第三步：融合省的是字节——实测（2026-11-14）</h3>
+<p>既然访存受限的算子只看字节数，<strong>少读写几次</strong>就快。</p>
+<p><span class="arithmatex">\(y = \text{GELU}(x + b) \times s\)</span>，x、b、s 各 <span class="arithmatex">\(2^{24}\)</span> 个 float32（每个 64 MiB）：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>kernel</th>
+<th>读写的张量</th>
+<th>字节数</th>
+<th>本机 MPS 实测</th>
+<th>有效带宽</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>eager</td>
+<td>add、gelu、mul 三个</td>
+<td>add 读 x、b 写 t1；gelu 读 t1 写 t2；mul 读 t2、s 写 y：<strong>8 个</strong></td>
+<td>537 MB</td>
+<td>1.14 ms</td>
+<td>471 GB/s</td>
+</tr>
+<tr>
+<td><code>torch.compile</code></td>
+<td>融合成一个</td>
+<td>读 x、b、s，写 y：<strong>4 个</strong></td>
+<td>268 MB</td>
+<td>0.57 ms</td>
+<td>471 GB/s</td>
+</tr>
+</tbody>
+</table>
+<p><strong>有效带宽一模一样</strong>（都跑满了内存带宽），区别只是字节数少了一半，<strong>时间也正好少一半</strong>。中间结果 t1、t2 在融合后只在寄存器里存在一下，从没写进显存（第 6 章的做沙拉类比）。</p>
+<p>这就是所有融合优化的共同原理：</p>
+<table>
+<thead>
+<tr>
+<th>融合</th>
+<th>省掉的中间结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>bias + GELU、残差 + norm</td>
+<td>每一步的中间张量</td>
+</tr>
+<tr>
+<td>fused AdamW（第 15、24 章）</td>
+<td>每个参数的一串临时张量，还省了大量 launch</td>
+</tr>
+<tr>
+<td>FlashAttention（第 14 章）</td>
+<td>T × T 的分数表</td>
+</tr>
+<tr>
+<td>fused cross-entropy（Liger-Kernel）</td>
+<td>B × T × V 的 logits / 概率表</td>
+</tr>
+</tbody>
+</table>
+<p><strong>一句话</strong>：融合不让中间结果落显存；实测带宽不变、字节减半、时间减半。</p>
+<h3 id="kernel2026-11-14">第四步：判断"值不值得手写一个融合 kernel"（2026-11-14）</h3>
+<pre><code>1. profiler 里这个算子占多少时间？（第 24 章；小于 5% 就别管）
+2. 它是访存受限吗？算算术强度，或看 Nsight Compute 的带宽利用率
+3. torch.compile 已经帮你融了吗？（第 31 章看生成代码）
+4. 还差多少？理论最快 = 必须读写的字节 ÷ 带宽；当前时间离它多远
+5. 差得多、compile 又融不了（特殊的规约、在线 softmax、反量化 + matmul）→ 手写 Triton（第 32–33 章）
+</code></pre>
+<p><strong>数字演示</strong>：一个 LayerNorm，输入 (8192, 4096) bf16 = 64 MiB，输出同样大，必须读写 128 MiB。H100 带宽 3.35 TB/s → 理论最快约 40 µs。实测 150 µs → 有效带宽只有 0.9 TB/s，值得优化；实测 50 µs → 已经 80% 了，别折腾。</p>
+<p><strong>一句话</strong>：先看占比，再看是否访存受限，再看 compile 融了没，最后算"离理论最快还差多少"。</p>
+<h3 id="roofline">动画演示：roofline</h3>
+<p><img alt="roofline" src="../animations/29-roofline.gif" /></p>
+<p>可交互版：<a href="../animations/29-roofline.html">animations/29-roofline.html</a>。下拉选硬件（H100 / 本机 Mac）；滑块调矩阵乘的 n。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>横轴是算术强度（对数），纵轴是能达到的算力（对数）；斜线是"带宽 × 强度"，平顶是峰值算力，交点是拐点；</li>
+<li>各个算子按算术强度落到线上：add、GELU、LayerNorm 在左边斜坡上，矩阵乘在右边平顶上；</li>
+<li>融合 3 个逐元素算子：点往右移（强度变大），能达到的算力变高；</li>
+<li>调小矩阵乘的 n：点往左移，小矩阵也会变成访存受限。</li>
+</ol>
+<h2 id="_2">练习与作答记录</h2>
+<p><strong>题 1</strong>：fp16 的 <code>x * y</code>（逐元素乘），每个元素读写多少字节、做几次运算？算术强度是多少？在 H100 上是哪种受限？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：bf16 的 n × n × n 矩阵乘，算术强度约 n / 3。在 H100（拐点约 295）上，n 小于多少时会变成访存受限？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：<code>y = (x + a) * b + c</code>，四个输入 x、a、b、c 都是 1 GB 的 fp32 张量。eager（三个 kernel）和完全融合各要读写多少 GB？带宽 2 TB/s 时理论时间各多少？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_3">口诀</h2>
+<blockquote>
+<p>时间看两笔：算的和搬的，谁大谁是瓶颈；算术强度低于拐点就是访存受限；<br />
+矩阵乘吃算力，其余算子吃带宽，时间只看读写字节；<br />
+融合不让中间结果落显存，带宽不变字节减半时间减半；手写之前先算离理论最快还差多少。</p>
+</blockquote>
+<h2 id="_4">本章复习卡片</h2>
+<ul>
+<li>P103（roofline：t ≥ max(运算/峰值, 字节/带宽)；算术强度；拐点 H100 ≈ 295，本机 ≈ 29）</li>
+<li>P104（常见算子的算术强度：add ≈ 0.08、GELU ≈ 1、矩阵乘 n/3）</li>
+<li>P105（融合实测：gelu(x+b)*s，eager 8 个张量 1.14 ms，compile 4 个张量 0.57 ms，带宽都是 471 GB/s）</li>
+<li>P106（要不要手写融合的五步判断；理论最快 = 必须读写字节 ÷ 带宽）</li>
+</ul>
+<h2 id="_5">附录 · 延伸阅读</h2>
+<h3 id="_6">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ AISPE 第 13 章</td>
+<td><code>ch13.md</code> 第 381–444 行</td>
+<td>GEMM 的 roofline 分析实例</td>
+</tr>
+<tr>
+<td>★ CUDA 讲义 第 9 章、第 21 章</td>
+<td>全章</td>
+<td>roofline 与 Nsight Compute；融合 softmax 的写法</td>
+</tr>
+<tr>
+<td>Ultra-Scale Playbook</td>
+<td>§How to improve performance with Kernels（<code>ultrascale-playbook.md</code> 第 2405–2710 行）、§Fused Kernels（第 2711–2752 行）</td>
+<td>从 GPU 结构讲为什么要融合</td>
+</tr>
+<tr>
+<td>Horace He「Making Deep Learning Go Brrrr From First Principles」</td>
+<td>全文（〔在线〕horace.io/brrr_intro.html）</td>
+<td>计算 / 带宽 / 开销三分法，最好的入门</td>
+</tr>
+<tr>
+<td>Williams, Waterman, Patterson 2009「Roofline」</td>
+<td>§2（〔在线〕CACM）</td>
+<td>roofline 模型出处</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_7">数学原理</h3>
+<ul>
+<li><strong>roofline</strong>：可达算力 <span class="arithmatex">\(P = \min(P_{peak},\ I \times B)\)</span>，<span class="arithmatex">\(I\)</span> 是算术强度，<span class="arithmatex">\(B\)</span> 是带宽。拐点 <span class="arithmatex">\(I^* = P_{peak} / B\)</span>。</li>
+<li><strong>矩阵乘的算术强度</strong>：<span class="arithmatex">\(\frac{2n^3}{3n^2 \cdot s} = \frac{2n}{3s}\)</span>（s 为每元素字节数；bf16 s = 2 → <span class="arithmatex">\(n/3\)</span>）。</li>
+<li><strong>融合的理论加速</strong>：访存受限时，加速比 = 融合前字节 ÷ 融合后字节（本例 8 / 4 = 2）。</li>
+</ul>
+<h3 id="_8">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>公式</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span class="arithmatex">\(I = \text{FLOPs} / \text{bytes}\)</span></td>
+<td>算术强度</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(I^* = P_{peak} / B\)</span></td>
+<td>拐点</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(t_{min} = \text{bytes} / B\)</span></td>
+<td>访存受限算子的理论最快</td>
+</tr>
+<tr>
+<td>有效带宽 = 读写字节 ÷ 实测时间</td>
+<td>衡量 kernel 好不好</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch29_why_fusion.py</code>，配套测试 <code>tests/test_ch29_36.py</code>；同一章的 notebook：<code>notebooks/ch29_why_fusion.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑（Mac 上用 MPS 计时）：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch29_why_fusion.py   # 一步一步打印  
+uv run pytest tests/test_ch29_36.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 拐点</td>
+<td>峰值 ÷ 带宽</td>
+<td><code>ridge(989e12, 3.35e12)</code></td>
+<td>295</td>
+</tr>
+<tr>
+<td>第二步 算术强度</td>
+<td>1/12；n/3</td>
+<td><code>intensity_matmul(4096)</code></td>
+<td>0.083；1365</td>
+</tr>
+<tr>
+<td>第三步 融合实测</td>
+<td>8 个张量 vs 4 个</td>
+<td><code>fusion_benchmark()</code></td>
+<td>约 1.1 ms vs 0.56 ms，带宽都约 480 GB/s</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">for name, fn, tensors in ((&quot;eager&quot;, f, 8), (&quot;compile&quot;, torch.compile(f), 4)):
+    ...
+    nbytes = tensors * n * 4               # 必须读写的字节
+    gbs = nbytes / ms / 1e6                # 有效带宽
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong>MPS 上 <code>torch.compile</code> 生成的是 Metal 代码</strong>：第 31 章能看到。</li>
+<li><strong>没有 GPU 时退回 CPU</strong>：比例还在，但带宽数字小得多。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把 f 改成 <code>F.gelu(x + b)</code>（2 个算子），预测 eager 读写几个张量再跑。</li>
+</ul><nav class="pager"><a href="28-compile-graphs.html">← 第 28 章 · 训练里用 compile 与 CUDA Graphs：消灭碎活和启动开销</a><a href="30-inference-mode.html">第 30 章 · 推理模式与 KV cache：生成一个 token 要做什么 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

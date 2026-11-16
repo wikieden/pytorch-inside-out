@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 17 章 · 集合通信：五个动词和它们的代价 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="17">第 17 章 · 集合通信：五个动词和它们的代价</h1><p><a class="btn" href="../animations/17-ring-allreduce.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：多卡之间交换数据靠哪几种"集合操作"？all-reduce、all-gather、reduce-scatter 各是什么结果？ring all-reduce 为什么每张卡只要发约 2 倍数据？哪个并行方法用哪个操作？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/16-process-model.html">第 16 章 进程模型</a> · 下一章：<a href="../lessons/18-ddp.html">第 18 章 DDP</a><br />
+对应原文：Ultra-Scale Playbook §A0「Parallel Programming Crash Course」（<code>distributed-pretraining/materials/text/ultrascale-playbook.md</code>：Broadcast 第 3297 行、Reduce &amp; AllReduce 第 3341 行、Gather &amp; AllGather 第 3398 行、Scatter &amp; ReduceScatter 第 3458 行、Ring AllReduce 第 3528–3575 行、Barrier 第 3576 行、NCCL 第 3608 行）；本章输出在本机 Gloo 2 进程上跑过</p>
+<p>本章缩写：K = 要通信的张量的元素个数；N = 参与的进程数（卡数）；DP / TP / PP / EP = Data / Tensor / Pipeline / Expert Parallelism（数据 / 张量 / 流水线 / 专家 并行）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="2026-11-14">第一步：五个动词（2026-11-14）</h3>
+<p><strong>类比：小组作业。</strong> 4 个组员各算了一份数，要合起来。</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>小组作业里</th>
+<th>前 → 后（2 个进程实测）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>all_reduce</strong>（全归约）</td>
+<td>大家把数<strong>加起来</strong>，每人都拿到总和</td>
+<td>rank 0 [1, 2]，rank 1 [2, 4] → 两人都是 <strong>[3, 6]</strong></td>
+</tr>
+<tr>
+<td><strong>all_gather</strong>（全收集）</td>
+<td>大家把自己的那份<strong>拼起来</strong>，每人都拿到完整的</td>
+<td>两人都是 [[1, 2], [2, 4]]</td>
+</tr>
+<tr>
+<td><strong>reduce_scatter</strong>（归约散射）</td>
+<td>先加起来，但每人<strong>只拿一段</strong></td>
+<td>rank 0 [10, 20]，rank 1 [20, 40] → 和是 [30, 60]，rank 0 拿 <strong>[30]</strong>，rank 1 拿 <strong>[60]</strong></td>
+</tr>
+<tr>
+<td><strong>broadcast</strong>（广播）</td>
+<td>一个人的数复制给所有人</td>
+<td>从 rank 1 广播：两人都是 [1.0]</td>
+</tr>
+<tr>
+<td><strong>all_to_all</strong>（全交换）</td>
+<td>每人把自己的数切成 N 份，第 i 份发给第 i 个人</td>
+<td>MoE 里把 token 发给对应专家（第 21 章）</td>
+</tr>
+</tbody>
+</table>
+<p>还有 <strong>barrier（栅栏）</strong>：什么数据都不传，只是"所有人都到这儿了再往下走"。</p>
+<pre><code class="language-python">y = x.clone(); dist.all_reduce(y)                    # 默认求和（op=dist.ReduceOp.SUM）
+dist.all_gather(out_list, x)
+dist.reduce_scatter_tensor(out, inp)
+dist.broadcast(t, src=1)
+</code></pre>
+<p><strong>集合操作的铁律</strong>：<strong>所有进程都要调用、按同样的顺序调用</strong>。有一个 rank 少调一次或顺序不同，其他 rank 会一直等，程序卡死（hang，第 22 章）。</p>
+<p><strong>一句话</strong>：all_reduce 加起来人人有，all_gather 拼起来人人有，reduce_scatter 加起来各拿一段，broadcast 一份复制给所有人；所有 rank 必须按同样顺序调用。</p>
+<h3 id="all_reduce-reduce_scatter-all_gather2026-11-14">第二步：all_reduce = reduce_scatter + all_gather（2026-11-14）</h3>
+<p>把 all_reduce 拆成两半：</p>
+<ol>
+<li><strong>reduce_scatter</strong>：大家把各自的数加起来，但每人只负责其中 <span class="arithmatex">\(\frac{1}{N}\)</span> 段，最后每人手里有一段"完整的和"；</li>
+<li><strong>all_gather</strong>：每人把自己那段完整的和发给所有人，拼回完整的结果。</li>
+</ol>
+<p>两步做完，效果和 all_reduce 一样。这个拆法非常重要：<strong>ZeRO / FSDP（第 19 章）正是把 all_reduce 拆开，中间插进"只更新自己那一段参数"</strong>，从而省显存。</p>
+<p><strong>一句话</strong>：all_reduce 可以拆成 reduce_scatter + all_gather；FSDP 就是在两半中间做事。</p>
+<h3 id="ring-all-reduce-2026-11-14">第三步：ring all-reduce 的代价（2026-11-14）</h3>
+<p><strong>最笨的办法</strong>：每人把整份数据发给其他所有人，每人要发 <span class="arithmatex">\((N-1) \times K\)</span>。卡越多越慢。</p>
+<p><strong>ring（环）</strong>：N 个人围成一圈，每人只和左右邻居传。数据切成 N 段。</p>
+<ul>
+<li>reduce_scatter 阶段：传 N − 1 轮，每轮每人发一段（<span class="arithmatex">\(\frac{K}{N}\)</span> 个数）给右边，同时从左边收一段加到自己这段上。N − 1 轮后每人手里有一段完整的和；</li>
+<li>all_gather 阶段：再传 N − 1 轮，把完整的段转一圈。</li>
+</ul>
+<p>每人一共发送：</p>
+<div class="arithmatex">\[2 \times (N - 1) \times \frac{K}{N} \;\approx\; 2K \quad (N \text{ 大时})\]</div>
+<p>（Playbook 第 3561–3566 行）读法："两个阶段，各 N − 1 轮，每轮发 K / N 个数"。<strong>和卡数几乎无关</strong>：4 卡是 <span class="arithmatex">\(2 \times 3/4 K = 1.5K\)</span>，64 卡是 <span class="arithmatex">\(2 \times 63/64 K ≈ 1.97K\)</span>。</p>
+<p><strong>数字演示</strong>：7B 参数的梯度，bf16（2 字节），K × 2 字节 = 14 GB。ring all-reduce 每张卡收发约 28 GB。机间网络 400 Gb/s ≈ 50 GB/s，约 0.56 秒；机内 NVLink 约 450 GB/s（单向，H100），约 0.06 秒。所以<strong>通信一定要和计算重叠</strong>（第 18 章），而且机间流量能省就省（第 19 章 HSDP）。</p>
+<p><strong>一句话</strong>：ring all-reduce 每卡发约 2K（和卡数几乎无关）；reduce_scatter、all_gather 各约 K。</p>
+<h3 id="2026-11-14_1">第四步：哪种并行用哪个动词（2026-11-14）</h3>
+<table>
+<thead>
+<tr>
+<th>并行方法</th>
+<th>主要的集合操作</th>
+<th>什么时候发</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DDP（第 18 章）</td>
+<td>all_reduce 梯度</td>
+<td>反向时，按桶</td>
+</tr>
+<tr>
+<td>FSDP / ZeRO-3（第 19 章）</td>
+<td>all_gather 参数、reduce_scatter 梯度</td>
+<td>每层前向前 / 反向后</td>
+</tr>
+<tr>
+<td>TP 张量并行（第 20 章）</td>
+<td>all_reduce 或 all_gather + reduce_scatter 激活</td>
+<td>每层里</td>
+</tr>
+<tr>
+<td>PP 流水线并行（第 21 章）</td>
+<td>send / recv（点对点）</td>
+<td>段与段之间</td>
+</tr>
+<tr>
+<td>EP 专家并行（第 21 章）</td>
+<td>all_to_all</td>
+<td>MoE 层前后</td>
+</tr>
+<tr>
+<td>初始化</td>
+<td>broadcast 参数</td>
+<td>开始时</td>
+</tr>
+</tbody>
+</table>
+<p><strong>一句话</strong>：DDP 用 all_reduce，FSDP 用 all_gather + reduce_scatter，TP 在层内通信，PP 点对点，MoE 用 all_to_all。</p>
+<h3 id="ring-all-reduce">动画演示：ring all-reduce</h3>
+<p><img alt="ring all-reduce" src="../animations/17-ring-allreduce.gif" /></p>
+<p>可交互版：<a href="../animations/17-ring-allreduce.html">animations/17-ring-allreduce.html</a>。滑块调卡数 N（3–6）。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>N 张卡围成一圈，每张卡的数据切成 N 段（每段一种颜色）；</li>
+<li>前 N − 1 轮（reduce_scatter）：每张卡把一段发给右边，右边加到自己那段上；每段的数字累加；</li>
+<li>后 N − 1 轮（all_gather）：把完整的段转一圈；</li>
+<li>下方累计"每张卡发了多少"，最后等于 2(N − 1) × K / N。</li>
+</ol>
+<h2 id="_2">练习与作答记录</h2>
+<p><strong>题 1</strong>：3 个进程，各有 [1, 2, 3]、[4, 5, 6]、[7, 8, 9]。all_reduce（求和）后每人是什么？reduce_scatter 后每人拿到什么？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：为什么说 all_reduce = reduce_scatter + all_gather？用题 1 的数说明。</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：K = 10 亿个数，N = 8 张卡，ring all-reduce 每张卡要发送多少个数？换成 N = 1024 呢？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_3">口诀</h2>
+<blockquote>
+<p>all_reduce 加起来人人有，all_gather 拼起来人人有，reduce_scatter 加完各拿一段，broadcast 一份发全体；<br />
+大家同序调用，少一个就卡死；all_reduce 拆成两半，FSDP 在中间做事；<br />
+ring 每卡发两倍 K，几乎不随卡数涨。</p>
+</blockquote>
+<h2 id="_4">本章复习卡片</h2>
+<ul>
+<li>P58（五个动词的结果；2 进程实测 [1, 2] + [2, 4] → [3, 6]；reduce_scatter → [30] / [60]）</li>
+<li>P59（all_reduce = reduce_scatter + all_gather；所有 rank 同序调用，否则 hang）</li>
+<li>P60（ring all-reduce 每卡发 2(N−1)K/N ≈ 2K；各并行方法用的动词）</li>
+</ul>
+<h2 id="_5">附录 · 延伸阅读</h2>
+<h3 id="_6">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ Ultra-Scale Playbook §A0</td>
+<td><code>ultrascale-playbook.md</code> 第 3275–3623 行（每个操作配一张图，Ring AllReduce 第 3528–3575 行）</td>
+<td>本章的图解版</td>
+</tr>
+<tr>
+<td>★ 官方文档 <code>torch.distributed</code></td>
+<td>"Collective functions"（〔在线〕）</td>
+<td>每个函数的参数、<code>async_op</code> 异步版本</td>
+</tr>
+<tr>
+<td>NCCL 文档</td>
+<td>"Collective Operations"（〔在线〕docs.nvidia.com/deeplearning/nccl）</td>
+<td>底层实现</td>
+</tr>
+<tr>
+<td>多机报告</td>
+<td><code>distributed-pretraining/notes/03-engineering-report.md</code> §1.3 通信账</td>
+<td>真实带宽下的估算</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_7">数学原理</h3>
+<ul>
+<li><strong>ring all-reduce 通信量</strong>：每卡 <span class="arithmatex">\(2(N-1)\frac{K}{N}\)</span> 个元素；reduce_scatter、all_gather 各 <span class="arithmatex">\((N-1)\frac{K}{N}\)</span>。</li>
+<li><strong>时间估算</strong>：<span class="arithmatex">\(t \approx \frac{\text{字节数}}{\text{带宽}} + \text{轮数} \times \text{延迟}\)</span>；ring 有 <span class="arithmatex">\(2(N-1)\)</span> 轮，卡很多时延迟项变大，NCCL 会改用树形算法。</li>
+</ul>
+<h3 id="_8">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dist.all_reduce(t, op=ReduceOp.SUM)</code></td>
+<td>原地求和，人人有</td>
+</tr>
+<tr>
+<td><code>dist.all_gather(list, t)</code> / <code>all_gather_into_tensor</code></td>
+<td>拼接</td>
+</tr>
+<tr>
+<td><code>dist.reduce_scatter_tensor(out, inp)</code></td>
+<td>求和后分段</td>
+</tr>
+<tr>
+<td><code>dist.broadcast(t, src)</code> / <code>dist.all_to_all</code> / <code>dist.barrier()</code></td>
+<td>广播 / 全交换 / 栅栏</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(2(N-1)K/N\)</span></td>
+<td>ring all-reduce 每卡发送量</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。分布式各章用 <code>dist_util.run</code> 在本机起 2 个 Gloo 进程（Mac 上自动设好 <code>GLOO_SOCKET_IFNAME=lo0</code>，第 16 章的坑），不需要 GPU。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch17_collectives.py</code>，配套测试 <code>tests/test_ch16_22.py</code>；同一章的 notebook：<code>notebooks/ch17_collectives.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch17_collectives.py   # 一步一步打印  
+uv run pytest tests/test_ch16_22.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 all_reduce</td>
+<td>求和人人有</td>
+<td><code>five_verbs</code> 的 all_reduce</td>
+<td>[3, 6]</td>
+</tr>
+<tr>
+<td>第一步 all_gather</td>
+<td>拼接人人有</td>
+<td>同上</td>
+<td>[[1, 2], [2, 4]]</td>
+</tr>
+<tr>
+<td>第一步 reduce_scatter</td>
+<td>求和各拿一段</td>
+<td>同上</td>
+<td>rank 0 [30]，rank 1 [60]</td>
+</tr>
+<tr>
+<td>第三步 ring 通信量</td>
+<td>2(N−1)K/N</td>
+<td><code>ring_allreduce_sent(1, N)</code></td>
+<td>4 卡 1.5K，64 卡 1.969K</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">y = x.clone(); dist.all_reduce(y)
+dist.all_gather(out_list, x)
+dist.reduce_scatter_tensor(out, inp)
+dist.broadcast(b, src=1)
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong>all_reduce 是原地的</strong>：所以先 <code>clone</code> 一份，不然原来的 x 就没了。</li>
+<li><strong>每个 rank 都要调用、顺序一样</strong>：<code>five_verbs</code> 两个 rank 跑的是完全相同的代码。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li><code>run(five_verbs, world=3)</code>，看三个进程的结果。</li>
+<li>在 <code>all_reduce</code> 里加 <code>op=dist.ReduceOp.MAX</code>。</li>
+</ul><nav class="pager"><a href="16-process-model.html">← 第 16 章 · 进程模型：一张卡一个进程，靠编号分工</a><a href="18-ddp.html">第 18 章 · DDP：每卡一份模型，反向时边算边对答案 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

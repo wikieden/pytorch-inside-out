@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 18 章 · DDP：每卡一份模型，反向时边算边对答案 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="18-ddp">第 18 章 · DDP：每卡一份模型，反向时边算边对答案</h1><p><a class="btn" href="../animations/18-ddp-buckets.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：DistributedDataParallel 包一下模型，背后做了哪三件事？为什么梯度要"分桶"发？通信怎么藏到反向计算后面？梯度累积时为什么要 <code>no_sync</code>？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/17-collectives.html">第 17 章 集合通信</a> · 下一章：<a href="../lessons/19-fsdp2.html">第 19 章 FSDP2</a><br />
+对应原文：Ultra-Scale Playbook §Data Parallelism（<code>ultrascale-playbook.md</code> 第 560 行起：First optimization 第 604 行、Second optimization: Bucketing 第 645 行、Third optimization: gradient accumulation 第 665 行）；AISPE ch04 §4.1.3（<code>ai-infra/.../chapters/ch04.md</code> 第 87–260 行，DDP 重叠在第 201 行起）；本章输出在本机 Gloo 2 进程上跑过</p>
+<p>本章缩写：DDP = DistributedDataParallel（分布式 / 数据 / 并行）；MB = megabyte（兆字节）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="2026-11-14">第一步：数据并行的思路（2026-11-14）</h3>
+<p><strong>类比：多个厨师照同一份菜谱练手。</strong> 每个厨师（卡）有一模一样的菜谱（模型），各自用不同的食材（数据）做一道菜，各自总结"菜谱哪里该改"（梯度）。改之前大家<strong>把意见平均一下</strong>，于是每人都按同样的意见改，菜谱始终保持一致。</p>
+<p>数学上为什么对：一个大 batch 的平均梯度 = 各个小 batch 平均梯度的平均（每卡 batch 一样大时）。所以 N 张卡、每卡 b 个样本，等价于一张卡跑 N × b 个样本。</p>
+<p><strong>一句话</strong>：数据并行 = 每卡一份完整模型、吃不同数据，梯度平均后一起更新，参数始终一致。</p>
+<h3 id="ddp-2026-11-14">第二步：DDP 做的三件事（2026-11-14）</h3>
+<pre><code class="language-python">model = DDP(model.to(local_rank), device_ids=[local_rank])
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>什么时候</th>
+<th>做什么</th>
+<th>实测（2 进程）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① 包装时</td>
+<td><strong>broadcast</strong> rank 0 的参数给所有人，保证起点一致</td>
+<td>两个 rank 故意用不同随机种子初始化，包装后权重都变成 [[−0.0053, 0.3793]]</td>
+</tr>
+<tr>
+<td>② 反向时</td>
+<td>梯度算好一批就 <strong>all_reduce</strong> 一批，然后<strong>除以 N 取平均</strong></td>
+<td>rank 0 梯度 [1, 0]，rank 1 梯度 [0, 1] → 两人都是 <strong>[0.5, 0.5]</strong></td>
+</tr>
+<tr>
+<td>③ 更新时</td>
+<td>什么都不用做：大家梯度一样、参数一样，各自 <code>opt.step()</code> 结果自然一样</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>注意第 ② 步是<strong>平均</strong>不是求和：DDP 在 all_reduce 后除以 world_size，所以学习率不用跟着卡数改（但全局 batch 变大了，通常还是会调学习率）。</p>
+<p>优化器状态每卡各存一份完整的。<strong>这就是 DDP 的显存问题</strong>：参数、梯度、优化器状态 N 张卡各存一份，一点没省（第 19 章 FSDP 解决）。</p>
+<p><strong>一句话</strong>：DDP = 开始时广播参数 + 反向时 all_reduce 平均梯度；更新各自做；显存一点不省。</p>
+<h3 id="2026-11-14_1">第三步：分桶 + 重叠——把通信藏起来（2026-11-14）</h3>
+<p><strong>最笨的做法</strong>：整个反向算完，再一次性 all_reduce 全部梯度。通信时 GPU 在干等。</p>
+<p><strong>第一个优化：重叠</strong>（Playbook 第 604 行）。反向是<strong>从最后一层往前</strong>算的，最后一层的梯度最先算好。不用等全部算完，<strong>某层梯度一好就发</strong>，通信和"前面几层的反向"同时进行。DDP 靠给每个参数注册 hook（第 7 章），梯度一算好 hook 就被触发。</p>
+<p><strong>第二个优化：分桶</strong>（Playbook 第 645 行）。每个参数单独发一次 all_reduce，几百次小通信，启动开销太大。DDP 把参数按<strong>反向的顺序</strong>装进一个个<strong>桶</strong>（bucket，默认 25 MB），一个桶里的梯度全部算好，就把整桶一次发出去。</p>
+<p><strong>数字演示</strong>：一个模型反向分 4 段，每段算 10 ms；每个桶 all_reduce 要 8 ms（先不算每次通信的启动开销；动画里每次多算 1 ms）。</p>
+<table>
+<thead>
+<tr>
+<th>方式</th>
+<th>时间线</th>
+<th>总用时</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>算完再发</td>
+<td>反向 40 ms，再通信 4 × 8 = 32 ms</td>
+<td>72 ms</td>
+</tr>
+<tr>
+<td>分桶重叠</td>
+<td>桶 1 在第 10 ms 开始发，和后面的反向并行；只有最后一个桶（最前面几层）的 8 ms 露在外面</td>
+<td>约 48 ms</td>
+</tr>
+</tbody>
+</table>
+<p><code>bucket_cap_mb</code> 可以调：桶太小，通信次数多、启动开销大；桶太大，第一个桶要等很久才发，重叠变少。AISPE ch04 第 113–122 行讲了桶大小的取舍。</p>
+<p><strong>一句话</strong>：反向从后往前，梯度好一桶发一桶，通信藏在前面几层的计算后面；桶大小是"次数"和"重叠"的折中。</p>
+<h3 id="no_sync2026-11-14">第四步：梯度累积要用 <code>no_sync</code>（2026-11-14）</h3>
+<p>想要大 batch 但显存不够时，攒 k 个小 batch 的梯度再更新一次（第 9 章）。在 DDP 里，<strong>每次</strong> <code>backward</code> 都会触发 all_reduce。前 k − 1 次的通信是白费的（反正还没到更新的时候）。</p>
+<pre><code class="language-python">for i, (x, y) in enumerate(loader):
+    ctx = model.no_sync() if (i + 1) % k != 0 else contextlib.nullcontext()
+    with ctx:                                   # 前 k-1 次：只在本地累加梯度，不通信
+        loss = loss_fn(model(x), y) / k
+        loss.backward()
+    if (i + 1) % k == 0:                        # 第 k 次：backward 时才 all_reduce
+        opt.step(); opt.zero_grad()
+</code></pre>
+<p>（Playbook 第 665 行"Interplay with gradient accumulation"。）</p>
+<p><strong>另外两个常见报错</strong>：</p>
+<ul>
+<li><strong>有参数没参与 loss</strong>（比如某个分支这一步没走）：DDP 一直等那个参数的梯度，报错。修模型，或设 <code>find_unused_parameters=True</code>（每步多一次遍历，慢）；</li>
+<li>每步用的参数集合固定时，设 <code>static_graph=True</code> 可以让 DDP 做更多优化。</li>
+</ul>
+<p><strong>一句话</strong>：梯度累积的前 k − 1 步包在 <code>no_sync()</code> 里省通信；有参数没进 loss 会报错。</p>
+<h3 id="_2">动画演示：分桶重叠</h3>
+<p><img alt="DDP 分桶重叠" src="../animations/18-ddp-buckets.gif" /></p>
+<p>可交互版：<a href="../animations/18-ddp-buckets.html">animations/18-ddp-buckets.html</a>。开关：<strong>分桶重叠 / 算完再发</strong>；滑块调桶数。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>上面一行是反向计算（从最后一层往前），下面一行是通信；</li>
+<li>算完再发：通信整块排在反向后面；</li>
+<li>分桶重叠：每个桶的梯度一凑齐，通信条就开始，和后面的计算并排；</li>
+<li>右下角对比两种方式的总用时，只有最后一个桶的通信露在外面。</li>
+</ol>
+<h2 id="_3">练习与作答记录</h2>
+<p><strong>题 1</strong>：DDP 包装模型时、反向时、更新时各做了什么通信（或不做）？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：4 卡 DDP，四张卡对某个参数算出的梯度分别是 2、4、6、8。all_reduce 之后每张卡上这个参数的梯度是多少？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：每卡 batch 8，想要全局 batch 256，有 8 张卡。梯度累积要攒几步？哪几步要包在 <code>no_sync()</code> 里？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_4">口诀</h2>
+<blockquote>
+<p>每卡一份模型吃不同数据，梯度平均一起改；<br />
+包装时广播参数，反向时 all_reduce 取平均，更新各自做；<br />
+梯度好一桶发一桶，通信藏在计算后；累积前几步 no_sync，参数没进 loss 要报错。</p>
+</blockquote>
+<h2 id="_5">本章复习卡片</h2>
+<ul>
+<li>P61（DDP 三件事：包装时 broadcast、反向 all_reduce 并除以 N、更新各自做；实测 [1, 0] 与 [0, 1] → [0.5, 0.5]）</li>
+<li>P62（分桶 + 重叠：反向从后往前，默认 25 MB 一桶；桶大小的取舍；只剩最后一桶露在外面）</li>
+<li>P63（no_sync 梯度累积；find_unused_parameters / static_graph；DDP 显存不省）</li>
+</ul>
+<h2 id="_6">附录 · 延伸阅读</h2>
+<h3 id="_7">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ Ultra-Scale Playbook §Data Parallelism</td>
+<td><code>ultrascale-playbook.md</code> 第 560–713 行</td>
+<td>三个优化（重叠、分桶、累积）各配一张时间线图</td>
+</tr>
+<tr>
+<td>★ AISPE 第 4 章</td>
+<td><code>ch04.md</code> 第 87–260 行</td>
+<td>手写 all_reduce 版 vs DDP 版对比，桶大小讨论</td>
+</tr>
+<tr>
+<td>Li et al. 2020「PyTorch Distributed: Experiences on Accelerating Data Parallel Training」</td>
+<td>§3 设计（〔在线〕VLDB，arXiv:2006.15704）</td>
+<td>DDP 原始论文：bucket、hook、重叠</td>
+</tr>
+<tr>
+<td>CS336 a2 handout</td>
+<td>DDP 部分</td>
+<td>自己实现"分桶重叠的 DDP"是作业题</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">数学原理</h3>
+<ul>
+<li><strong>梯度平均等价于大 batch</strong>：<span class="arithmatex">\(\frac{1}{N}\sum_{r=1}^{N}\frac{1}{b}\sum_{i \in B_r}\nabla \ell_i = \frac{1}{Nb}\sum_{i}\nabla\ell_i\)</span>。</li>
+<li><strong>重叠后的通信暴露时间</strong> ≈ 最后一个桶的通信时间（若每桶通信 ≤ 每段计算）。</li>
+</ul>
+<h3 id="_9">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DDP(model, device_ids=[local_rank], bucket_cap_mb=25)</code></td>
+<td>包装</td>
+</tr>
+<tr>
+<td><code>with model.no_sync():</code></td>
+<td>这次反向不通信</td>
+</tr>
+<tr>
+<td><code>find_unused_parameters=True</code> / <code>static_graph=True</code></td>
+<td>处理未用参数 / 固定图优化</td>
+</tr>
+<tr>
+<td>全局 batch = 每卡 batch × 卡数 × 累积步数</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_10">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。分布式各章用 <code>dist_util.run</code> 在本机起 2 个 Gloo 进程（Mac 上自动设好 <code>GLOO_SOCKET_IFNAME=lo0</code>，第 16 章的坑），不需要 GPU。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch18_ddp.py</code>，配套测试 <code>tests/test_ch16_22.py</code>；同一章的 notebook：<code>notebooks/ch18_ddp.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch18_ddp.py   # 一步一步打印  
+uv run pytest tests/test_ch16_22.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第二步 包装时 broadcast</td>
+<td>起点一致</td>
+<td><code>ddp_demo</code> 的 weight</td>
+<td>两个 rank 相同</td>
+</tr>
+<tr>
+<td>第二步 反向时平均</td>
+<td>[1, 0] 与 [0, 1]</td>
+<td><code>ddp_demo</code> 的 grad</td>
+<td>都是 [0.5, 0.5]</td>
+</tr>
+<tr>
+<td>第三步 分桶重叠</td>
+<td>4 段 × 10 ms，每桶 8 ms</td>
+<td><code>bucket_timeline()</code></td>
+<td>不重叠 72 ms，重叠 48 ms</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">torch.manual_seed(rank)                   # 故意让初始化不同
+d = DDP(m)                                # 包装时 broadcast rank 0 的参数
+d(xb).sum().backward()                    # 梯度 all_reduce 后除以 world_size
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong>DDP 在 CPU 上不传 <code>device_ids</code></strong>：GPU 时才写 <code>device_ids=[local_rank]</code>。</li>
+<li><strong><code>bucket_timeline</code> 不算启动开销</strong>：动画里每次通信多 1 ms，所以数字略大。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li><code>bucket_timeline(n_buckets=1)</code> 和 <code>n_buckets=8</code> 比一比。</li>
+<li>把 <code>ddp_demo</code> 里两个 rank 的输入都改成 [[1, 0]]，看平均梯度。</li>
+</ul><nav class="pager"><a href="17-collectives.html">← 第 17 章 · 集合通信：五个动词和它们的代价</a><a href="19-fsdp2.html">第 19 章 · FSDP2：每卡只存一片，用到时再拼 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

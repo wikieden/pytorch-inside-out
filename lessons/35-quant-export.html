@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 35 章 · 量化与导出：模型变小、脱离 Python 部署 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="35-python">第 35 章 · 量化与导出：模型变小、脱离 Python 部署</h1><p><a class="btn" href="../animations/35-quantize.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：量化是怎么把 float 变成 int8 / int4 的，误差从哪来？weight-only 和动态激活量化有什么不同？<code>torch.export</code> 导出的是什么，AOTInductor 又把它变成了什么？<br />
+讲解日期：2026-11-15 · 上一章：<a href="../lessons/34-cpp-extension.html">第 34 章 C++ / CUDA 扩展</a> · 下一章：<a href="../lessons/36-bench-correctness.html">第 36 章 benchmark 与正确性</a><br />
+对应原文：AISPE ch13「PyTorch 架构优化（torchao）、量化、稀疏性和剪枝」（<code>ch13.md</code> 第 997–1006 行）；torchao 文档与 README（〔在线〕github.com/pytorch/ao）；官方文档 <code>torch.export</code>、AOTInductor（〔在线〕）；LLM 全链路地图量化部分（<code>llm-full-stack/notes/00-full-stack-map.md</code>）；本章量化误差、文件大小和导出结果是本机 torch 2.15.0 + torchao 0.18.0 实测</p>
+<p>本章缩写：int8 / int4 = 8 / 4 位整数；PTQ = Post-Training Quantization（训练后 / 量化）；QAT = Quantization-Aware Training（量化 / 感知 / 训练）；AOT = Ahead-Of-Time（提前编译）；<code>.pt2</code> = PyTorch 2 的导出包格式；ExecuTorch = PyTorch 的端侧（手机、嵌入式）运行时；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="2026-11-15">第一步：量化 = 一把更粗的尺子 + 一个缩放系数（2026-11-15）</h3>
+<p><strong>类比：用整数刻度记身高。</strong> 尺子只有 −127 到 127 的整数刻度，先约定"1 格 = 多少厘米"（缩放系数 scale），量的时候数格子，用的时候格子数 × scale 还原。</p>
+<p><strong>对称 int8 量化</strong>：</p>
+<div class="arithmatex">\[s = \frac{\max|w|}{127}, \qquad q = \text{round}\!\left(\frac{w}{s}\right), \qquad \hat w = q \times s\]</div>
+<p>读法：s 是每一格代表的大小；q 是整数（存这个）；<span class="arithmatex">\(\hat w\)</span> 是还原出来的近似值。</p>
+<p><strong>数字演示</strong>：<span class="arithmatex">\(w = [-0.6, 0.2, 1.0]\)</span>：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>int8（最大 127）</th>
+<th>int4（最大 7）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>s</td>
+<td>1.0 / 127 = 0.00787</td>
+<td>1.0 / 7 = 0.143</td>
+</tr>
+<tr>
+<td>q</td>
+<td>[−76, 25, 127]</td>
+<td>[−4, 1, 7]</td>
+</tr>
+<tr>
+<td>还原 <span class="arithmatex">\(\hat w\)</span></td>
+<td>[−0.598, 0.197, 1.000]</td>
+<td>[−0.571, 0.143, 1.000]</td>
+</tr>
+<tr>
+<td>最大误差</td>
+<td>0.003</td>
+<td>0.057</td>
+</tr>
+</tbody>
+</table>
+<p>int4 的格子粗了 18 倍，误差大得多。（例子特意避开了 <span class="arithmatex">\(w/s\)</span> 正好落在两个整数正中间的情况，比如 −0.5 ÷ (1/7) = −3.5：那时舍入方向取决于浮点误差，float32 和 float64 可能一个给 −3、一个给 −4。）所以 int4 一般<strong>分组</strong>：每 32 / 64 / 128 个权重共用一个 s（group-wise，分组量化），一个离群值只拖累自己那一组（和第 26 章 FP8 的分块缩放同一个思路）。</p>
+<p><strong>一句话</strong>：量化 = 选缩放系数 s，存 round(w / s) 的整数，用时乘回 s；位数越少格子越粗，int4 要分组缩放。</p>
+<h3 id="2026-11-15_1">第二步：量化什么——权重、激活（2026-11-15）</h3>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>量化什么</th>
+<th>计算怎么做</th>
+<th>适合</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>weight-only</strong>（只量化权重）</td>
+<td>权重存 int8 / int4</td>
+<td>算的时候反量化回 bf16 再乘</td>
+<td><strong>LLM decode</strong>：访存受限（第 30 章），权重字节减少直接提速</td>
+</tr>
+<tr>
+<td>动态激活 + 权重</td>
+<td>权重 int8，激活每次按当前值现算 s 量化</td>
+<td>int8 × int8 矩阵乘</td>
+<td>算力受限的场景（大 batch、prefill）</td>
+</tr>
+<tr>
+<td>FP8（第 26 章）</td>
+<td>权重和激活都 FP8</td>
+<td>FP8 张量核心</td>
+<td>H100 及以后</td>
+</tr>
+</tbody>
+</table>
+<p>为什么 weight-only 对 decode 特别有效：第 30 章算过，batch 1 decode 的上限 = 带宽 ÷ 权重字节。bf16 → int4，字节变成 1/4，上限理论上 ×4（实际受反量化开销影响，通常 2–3 倍）。</p>
+<p><strong>实测</strong>（torchao，本机 CPU）：两层 <code>Linear(1024, 1024)</code>，<code>Int8WeightOnlyConfig</code>：</p>
+<pre><code class="language-python">from torchao.quantization import quantize_, Int8WeightOnlyConfig
+quantize_(model, Int8WeightOnlyConfig())      # 原地把 Linear 的权重换成 int8 张量子类
+</code></pre>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>fp32</th>
+<th>int8 weight-only</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>state_dict 大小</td>
+<td>8.01 MB</td>
+<td>2.02 MB</td>
+</tr>
+<tr>
+<td>输出相对误差</td>
+<td>—</td>
+<td>0.56%</td>
+</tr>
+</tbody>
+</table>
+<p>量化后权重变成一个叫 <code>Int8Tensor</code> 的<strong>张量子类</strong>：它在第 3 章分派梯子的 Python 层（<code>__torch_dispatch__</code>）拦截矩阵乘，换成"反量化 + 乘"或专门的 int8 kernel。torchao 0.18 里可用的配置还有 <code>Int4WeightOnlyConfig</code>、<code>Int8DynamicActivationInt8WeightConfig</code>、<code>Float8DynamicActivationFloat8WeightConfig</code> 等（名字随版本变，以文档为准）；int4 的快速 kernel 需要 CUDA。</p>
+<p><strong>PTQ vs QAT</strong>：上面是训练完直接量化（PTQ）；精度掉得多时，可以在训练中模拟量化误差（QAT，torchao 也支持），让模型适应。</p>
+<p><strong>一句话</strong>：decode 用 weight-only（字节少 = 快），大 batch 才考虑激活也量化；torchao 用张量子类替换权重；实测 int8 权重 4 倍压缩、误差 0.56%。</p>
+<h3 id="torchexport2026-11-15">第三步：<code>torch.export</code>——把模型抓成一张完整的图（2026-11-15）</h3>
+<p><code>torch.compile</code> 是"边跑边编"，允许断图、回 Python。部署时我们要的是<strong>一张完整、不依赖 Python 代码的图</strong>：</p>
+<pre><code class="language-python">ep = torch.export.export(model, (x,))          # 返回 ExportedProgram
+print(ep.graph_module.code)
+</code></pre>
+<p><strong>实测</strong>输出（两层 MLP）：</p>
+<pre><code class="language-python">def forward(self, p_0_weight, p_0_bias, p_2_weight, p_2_bias, input):
+    linear = torch.ops.aten.linear.default(input_1, p_0_weight, p_0_bias)
+    gelu = torch.ops.aten.gelu.default(linear)
+    linear_1 = torch.ops.aten.linear.default(gelu, p_2_weight, p_2_bias)
+    return (linear_1,)
+</code></pre>
+<p>和 compile 的区别：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>torch.compile</code></th>
+<th><code>torch.export</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>遇到抓不了的</td>
+<td>断图，回 Python 继续跑</td>
+<td><strong>报错</strong>，必须改到能完整抓下来</td>
+</tr>
+<tr>
+<td>输出</td>
+<td>加速后的可调用对象</td>
+<td><code>ExportedProgram</code>：参数 + 一张 ATen 算子图，可序列化</td>
+</tr>
+<tr>
+<td>形状</td>
+<td>自动处理</td>
+<td>默认按示例输入固定；变的维度要声明</td>
+</tr>
+</tbody>
+</table>
+<p>声明动态维度（实测导出后 batch 5 也能跑）：</p>
+<pre><code class="language-python">batch = torch.export.Dim(&quot;batch&quot;, min=1, max=64)
+ep = torch.export.export(model, (x,), dynamic_shapes={&quot;input&quot;: {0: batch}})
+torch.export.save(ep, &quot;model.pt2&quot;)
+</code></pre>
+<p>自定义算子要导出，必须有 fake 实现（第 33 章）。</p>
+<p><strong>一句话</strong>：export 把模型抓成一张完整的 ATen 图（抓不下就报错），变的维度用 Dim 声明，可以存成 .pt2。</p>
+<h3 id="aotinductor-python-2026-11-15">第四步：AOTInductor——提前编译成不需要 Python 的包（2026-11-15）</h3>
+<p>export 出来的图还要有人去执行。<strong>AOTInductor</strong> 用第 6 章的 Inductor <strong>提前</strong>把它编译成机器码，打成一个 <code>.pt2</code> 包：</p>
+<pre><code class="language-python">path = torch._inductor.aoti_compile_and_package(ep, package_path=&quot;model.pt2&quot;)
+runner = torch._inductor.aoti_load_package(path)     # Python 里加载
+y = runner(torch.randn(5, 16))
+</code></pre>
+<p><strong>实测</strong>：编译打包 4.1 秒；加载后 batch 5 输入能跑，和原模型输出一致（allclose = True）。</p>
+<p>同一个 <code>.pt2</code> 也能在 <strong>C++</strong> 里加载执行（<code>torch::inductor::AOTIModelPackageLoader</code>），服务进程里完全不用 Python。</p>
+<p><strong>部署路线一览</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>目标</th>
+<th>路线</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python 服务、要最快</td>
+<td><code>torch.compile</code>（+ 第 28、30 章的 CUDA Graph）</td>
+</tr>
+<tr>
+<td>C++ 服务、没有 Python</td>
+<td><code>torch.export</code> → AOTInductor <code>.pt2</code></td>
+</tr>
+<tr>
+<td>手机 / 嵌入式</td>
+<td><code>torch.export</code> → ExecuTorch</td>
+</tr>
+<tr>
+<td>LLM 在线服务</td>
+<td>vLLM / SGLang（内部用 PyTorch + 自定义 kernel + 量化 + 连续批处理），见 LLM 全链路地图</td>
+</tr>
+</tbody>
+</table>
+<p><strong>一句话</strong>：AOTInductor 把导出的图提前编译成 .pt2 包，Python 和 C++ 都能加载；LLM 服务直接用 vLLM / SGLang。</p>
+<h3 id="_2">动画演示：量化的尺子</h3>
+<p><img alt="量化" src="../animations/35-quantize.gif" /></p>
+<p>可交互版：<a href="../animations/35-quantize.html">animations/35-quantize.html</a>。滑块调位数（2–8 位）和分组大小。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>上面是一组权重（编的，带一个离群值 3.0），下面是量化后的整数格子；</li>
+<li>每个权重画一条线连到最近的格子，红色是还原误差；</li>
+<li>位数从 8 拖到 4：格子变粗、误差变大；</li>
+<li>打开分组：离群值所在的组格子粗，其他组格子细，总误差下降。</li>
+</ol>
+<h2 id="_3">练习与作答记录</h2>
+<p><strong>题 1</strong>：权重 <span class="arithmatex">\([0.3, -0.9, 0.6]\)</span>，对称 int8 量化。s、q、还原值各是多少？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：7B 模型 bf16 权重 14 GB。int4 weight-only（每参数 0.5 字节，先忽略缩放系数）后多大？batch 1 decode 理论上限变成原来的几倍？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：一个模型 <code>torch.compile</code> 能跑，但 <code>torch.export</code> 报错。最可能是什么原因？（提示：第 6 章）</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_4">口诀</h2>
+<blockquote>
+<p>量化是粗尺子加系数：s 等于最大绝对值除以 127，存 round(w/s)，用时乘回 s；<br />
+位数越少格子越粗，int4 要分组；decode 吃带宽，weight-only 最划算；<br />
+export 抓整图、抓不下就报错，Dim 声明会变的维；AOTInductor 提前编成 .pt2，C++ 也能跑。</p>
+</blockquote>
+<h2 id="_5">本章复习卡片</h2>
+<ul>
+<li>P128（对称量化公式；[−0.6, 0.2, 1.0] int8 → [−76, 25, 127]、最大误差 0.003；int4 → [−4, 1, 7]、误差 0.057，要分组）</li>
+<li>P129（weight-only vs 动态激活量化；decode 为什么用 weight-only；torchao 张量子类；实测 8.01 → 2.02 MB、误差 0.56%）</li>
+<li>P130（torch.export：完整 ATen 图、抓不下报错、Dim 动态维、fake 实现必需）</li>
+<li>P131（AOTInductor：aoti_compile_and_package / aoti_load_package，实测 4.1 s；部署路线表）</li>
+</ul>
+<h2 id="_6">附录 · 延伸阅读</h2>
+<h3 id="_7">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ torchao README</td>
+<td>"Quantization"、"Inference" 表格（〔在线〕github.com/pytorch/ao）</td>
+<td>各配置的速度 / 精度数字和用法</td>
+</tr>
+<tr>
+<td>★ 官方文档 <code>torch.export</code></td>
+<td>"Expressing Dynamism"、"Graph Breaks"（〔在线〕）</td>
+<td>导出规则</td>
+</tr>
+<tr>
+<td>官方文档 AOTInductor</td>
+<td>全文（〔在线〕docs.pytorch.org/docs/stable/torch.compiler_aot_inductor.html）</td>
+<td>Python / C++ 加载</td>
+</tr>
+<tr>
+<td>AISPE 第 13 章</td>
+<td><code>ch13.md</code> 第 997–1006 行</td>
+<td>torchao 在训练与推理中的位置</td>
+</tr>
+<tr>
+<td>Frantar et al. 2022「GPTQ」、Lin et al. 2023「AWQ」</td>
+<td>方法部分（〔在线〕arXiv:2210.17323、2306.00978）</td>
+<td>更好的 int4 权重量化算法</td>
+</tr>
+<tr>
+<td>LLM 全链路地图</td>
+<td>量化部分</td>
+<td>推理服务里的量化选型</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">数学原理</h3>
+<ul>
+<li><strong>对称量化</strong>：<span class="arithmatex">\(s = \max|w| / (2^{b-1} - 1)\)</span>，<span class="arithmatex">\(q = \text{round}(w/s)\)</span>，误差 <span class="arithmatex">\(|w - \hat w| \le s/2\)</span>。</li>
+<li><strong>非对称量化</strong>：加零点 z，<span class="arithmatex">\(q = \text{round}(w/s) + z\)</span>，适合不以 0 为中心的分布（如 ReLU 后的激活）。</li>
+<li><strong>分组的好处</strong>：误差上限 <span class="arithmatex">\(s/2\)</span> 正比于组内 <span class="arithmatex">\(\max|w|\)</span>，离群值只放大自己那组的 s。</li>
+</ul>
+<h3 id="_9">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span class="arithmatex">\(s = \max\lvert w\rvert / 127\)</span>，<span class="arithmatex">\(q = \text{round}(w/s)\)</span>，<span class="arithmatex">\(\hat w = qs\)</span></td>
+<td>对称 int8</td>
+</tr>
+<tr>
+<td><code>quantize_(model, Int8WeightOnlyConfig())</code></td>
+<td>torchao 量化</td>
+</tr>
+<tr>
+<td><code>torch.export.export(m, args, dynamic_shapes=...)</code> / <code>torch.export.save</code></td>
+<td>导出</td>
+</tr>
+<tr>
+<td><code>torch._inductor.aoti_compile_and_package(ep)</code> / <code>aoti_load_package(path)</code></td>
+<td>AOTInductor</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_10">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch35_quant_export.py</code>，配套测试 <code>tests/test_ch29_36.py</code>；同一章的 notebook：<code>notebooks/ch35_quant_export.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch35_quant_export.py   # 一步一步打印  
+uv run pytest tests/test_ch29_36.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 对称量化</td>
+<td>s = max</td>
+<td>w</td>
+<td>/127</td>
+</tr>
+<tr>
+<td>第一步 int4</td>
+<td>s = max</td>
+<td>w</td>
+<td>/7</td>
+</tr>
+<tr>
+<td>第二步 torchao</td>
+<td>Int8WeightOnlyConfig</td>
+<td><code>int8_weight_only()</code></td>
+<td>8.01 → 2.02 MB，误差 0.56%，Int8Tensor</td>
+</tr>
+<tr>
+<td>第三、四步 export + AOTInductor</td>
+<td>—</td>
+<td><code>export_and_aoti()</code></td>
+<td>linear / gelu / linear；batch 5；一致</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">quantize_(model, Int8WeightOnlyConfig())
+ep = torch.export.export(m, (x,), dynamic_shapes={&quot;input&quot;: {0: batch}})
+path = torch._inductor.aoti_compile_and_package(ep, package_path=...)
+runner = torch._inductor.aoti_load_package(path)
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong>正好落在两个整数中间的值不稳</strong>：−0.5 ÷ (1/7) = −3.5，float32 下得 −3、float64 下得 −4，所以例子换成了 −0.6。</li>
+<li><strong>torchao 的配置名随版本变</strong>：本机是 0.18.0。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li><code>symmetric_quant([0.01, 0.02, 5.0], 8)</code>，看小数被量化成什么。</li>
+<li>把 <code>Int8WeightOnlyConfig</code> 换成 <code>Int8DynamicActivationInt8WeightConfig</code>，看误差。</li>
+</ul><nav class="pager"><a href="34-cpp-extension.html">← 第 34 章 · C++ / CUDA 扩展：TORCH_LIBRARY 把 C++ 函数登记进分派表</a><a href="36-bench-correctness.html">第 36 章 · benchmark 与正确性：测准、对齐、再上线 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

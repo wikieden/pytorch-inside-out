@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 2 章 · Tensor 内部：一块内存 + 一张&quot;怎么读&quot;的说明书 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="2-tensor">第 2 章 · Tensor 内部：一块内存 + 一张"怎么读"的说明书</h1><p><a class="btn" href="../animations/02-tensor-stride.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：一个 Tensor 里面到底存了什么？为什么 <code>x.t()</code>、<code>x[:, 1:]</code> 几乎不花时间？什么叫 contiguous，为什么 <code>view</code> 有时会报错？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/01-op-journey.html">第 1 章 一行代码的旅程</a> · 下一章：<a href="../lessons/03-dispatcher.html">第 3 章 分派器</a><br />
+对应原文：00-overview.md §2.1；官方文档 Tensor Views（〔在线〕docs.pytorch.org/docs/stable/tensor_view.html）；ezyang「PyTorch internals」Tensor 一节（〔在线〕）</p>
+<p>本章缩写：dtype = data type（数据 / 类型）；numel = number of elements（元素 / 个数）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="tensor-2026-11-14">第一步：Tensor = 一排数 + 说明书（2026-11-14）</h3>
+<p>内存是<strong>一维</strong>的，像一条很长的走廊，每个格子放一个数。可我们要的是 2 行 3 列的表格。怎么办？</p>
+<p><strong>类比：电影院座位。</strong> 电影院的座位票其实是从 0 开始连续编号的（0、1、2、3…）。要说"第 1 排第 2 座"，就得知道"每排几个座"：第 1 排第 2 座 = 1 × 3 + 2 = 5 号。</p>
+<p>Tensor 就是这样：</p>
+<table>
+<thead>
+<tr>
+<th>部分</th>
+<th>叫什么</th>
+<th>例子 <code>x = torch.arange(6).view(2, 3)</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>一排数</td>
+<td><strong>storage</strong>（存储）</td>
+<td><code>[0, 1, 2, 3, 4, 5]</code></td>
+</tr>
+<tr>
+<td>几行几列</td>
+<td><strong>shape</strong>（形状，也叫 size）</td>
+<td><code>(2, 3)</code></td>
+</tr>
+<tr>
+<td>每个维度走一步跳几格</td>
+<td><strong>stride</strong>（步长）</td>
+<td><code>(3, 1)</code>：换一行跳 3 格，换一列跳 1 格</td>
+</tr>
+<tr>
+<td>从第几格开始</td>
+<td><strong>storage_offset</strong>（偏移）</td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td>每个数什么类型</td>
+<td><strong>dtype</strong></td>
+<td><code>torch.int64</code></td>
+</tr>
+<tr>
+<td>放在哪</td>
+<td><strong>device</strong></td>
+<td><code>cpu</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>取元素的公式</strong>：</p>
+<div class="arithmatex">\[\text{x}[i, j] \text{ 在 storage 的位置} = \text{offset} + i \times \text{stride}_0 + j \times \text{stride}_1\]</div>
+<p>读法：offset 加上"行号乘行步长"再加"列号乘列步长"。</p>
+<p><strong>数字演示</strong>：<code>x[1, 2]</code> → 0 + 1 × 3 + 2 × 1 = 5，storage 第 5 格就是 5 ✓。</p>
+<pre><code class="language-python">x = torch.arange(6).view(2, 3)
+x.shape, x.stride(), x.storage_offset()   # (torch.Size([2, 3]), (3, 1), 0)
+</code></pre>
+<p><strong>一句话</strong>：Tensor 不是"一张表"，而是"一排数 + 一张怎么把它看成表的说明书（shape、stride、offset）"。</p>
+<h3 id="view-2026-11-14">第二步：view 只改说明书，不搬数（2026-11-14）</h3>
+<p>既然"表格"只是说明书，那很多操作<strong>只要改说明书</strong>，数一个都不用动。这类操作叫 <strong>view（视图）</strong>，结果和原张量<strong>共用同一块 storage</strong>。</p>
+<p><strong>转置 <code>x.t()</code></strong>：行列互换。不搬数，只把 shape 和 stride 都对调：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>shape</th>
+<th>stride</th>
+<th>offset</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>x</code></td>
+<td>(2, 3)</td>
+<td>(3, 1)</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>x.t()</code></td>
+<td>(3, 2)</td>
+<td>(1, 3)</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>验证：<code>x.t()[2, 1]</code> 应该等于 <code>x[1, 2]</code> = 5。用公式：0 + 2 × 1 + 1 × 3 = 5 ✓。</p>
+<p><strong>切片 <code>x[:, 1:]</code></strong>（每行去掉第 0 列）：shape (2, 2)，stride 还是 (3, 1)，<strong>offset 变成 1</strong>。<code>[0, 0]</code> 位置 = 1 + 0 + 0 = 1 ✓（原来的 <code>x[0, 1]</code>）。</p>
+<p><strong>证明共用内存</strong>：改视图，原张量跟着变。</p>
+<pre><code class="language-python">t = x.t()
+t[0, 0] = 100
+x[0, 0]                       # tensor(100)：改的是同一格
+x.data_ptr() == t.data_ptr()  # True
+</code></pre>
+<p><strong>常见的 view 操作</strong>：<code>view</code>、<code>t / transpose / permute</code>、切片、<code>unsqueeze / squeeze</code>、<code>expand</code>、<code>narrow</code>、<code>unflatten</code>。</p>
+<p><strong>一句话</strong>：view = 新说明书 + 旧 storage；几乎零开销，但改一个另一个也变。</p>
+<h3 id="contiguous2026-11-14">第三步：contiguous——说明书是不是"老老实实按行排"（2026-11-14）</h3>
+<p><strong>contiguous（连续）</strong>：stride 恰好是"行优先、紧挨着排"的那一种。shape (2, 3) 的标准 stride 是 (3, 1)；shape (3, 2) 的标准 stride 是 (2, 1)。</p>
+<p><code>x.t()</code> 的 shape 是 (3, 2)，stride 却是 (1, 3)，不是标准的 (2, 1)，所以 <strong>不连续</strong>：</p>
+<pre><code class="language-python">x.is_contiguous()      # True
+x.t().is_contiguous()  # False
+</code></pre>
+<p><strong>为什么 <code>view</code> 会报错</strong>：<code>view(6)</code> 要把张量"拉成一行"，要求按行读出来的顺序正好是 storage 里的顺序。<code>x.t()</code> 按行读是 0, 3, 1, 4, 2, 5，而 storage 里是 0, 1, 2, 3, 4, 5，<strong>光改说明书做不到</strong>，只能真的搬数。所以：</p>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>x.t().view(6)</code></td>
+<td>报错（RuntimeError：view size is not compatible…）</td>
+</tr>
+<tr>
+<td><code>x.t().contiguous().view(6)</code></td>
+<td>先复制成标准排法，再 view：<code>[0, 3, 1, 4, 2, 5]</code></td>
+</tr>
+<tr>
+<td><code>x.t().reshape(6)</code></td>
+<td>能 view 就 view，不能就自动复制，结果同上</td>
+</tr>
+</tbody>
+</table>
+<p><strong>为什么在乎连续</strong>：很多 kernel 假设数据连续，碰到不连续的输入会先偷偷复制一份；GPU 读不连续的内存也更慢（读相邻元素要跳着读）。性能分析里看到莫名其妙的 <code>copy_</code> / <code>contiguous</code>，多半是这里来的。</p>
+<p><strong>一句话</strong>：contiguous = 按行老实排；转置、permute 后通常不连续，<code>view</code> 不了就用 <code>reshape</code> 或先 <code>.contiguous()</code>（会复制）。</p>
+<h3 id="stride-02026-11-14">第四步：stride = 0——不复制的"广播"（2026-11-14）</h3>
+<p>stride 可以是 <strong>0</strong>：这一维走一步，内存一格不动，等于同一个数被"看"了很多遍。</p>
+<pre><code class="language-python">b = torch.tensor([10, 20, 30])        # shape (3,), stride (1,)
+B = b.expand(4, 3)                     # shape (4, 3), stride (0, 1)
+</code></pre>
+<p>4 行都读同一段内存，<strong>没有复制</strong>。对比 <code>b.repeat(4, 1)</code>：真复制出 12 个数。广播加法 <code>x + b</code>（第 11 章）内部就是这么做的。</p>
+<p><strong>一句话</strong>：stride 0 = 一份数据假装成很多份；<code>expand</code> 不花内存，<code>repeat</code> 才真复制。</p>
+<h3 id="_2">动画演示：同一块内存，三份说明书</h3>
+<p><img alt="Tensor 的 storage 与 stride" src="../animations/02-tensor-stride.gif" /></p>
+<p>可交互版：<a href="../animations/02-tensor-stride.html">animations/02-tensor-stride.html</a>。按钮切换四种看法：<strong>原张量 / 转置 / 切片 / expand</strong>。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>下面一排是 storage（一维内存），上面是按说明书摆出来的表格；</li>
+<li>依次点亮表格的每个格子，连线指向它在 storage 里的那一格，旁边写出 offset + i × stride₀ + j × stride₁ 的算式；</li>
+<li>注意转置时连线是"跳着"读的，这就是不连续；expand 时几行连到同一段内存。</li>
+</ol>
+<h2 id="_3">练习与作答记录</h2>
+<p><strong>题 1</strong>：<code>y = torch.arange(12).view(3, 4)</code>。写出 <code>y</code> 的 shape 和 stride；用公式算 <code>y[2, 1]</code> 在 storage 的第几格。</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：<code>z = y.t()</code>。写出 <code>z</code> 的 shape、stride、是否 contiguous；<code>z.view(12)</code> 会怎样？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：<code>w = y[1:, 2:]</code>（去掉第 0 行和前两列）。写出 shape、stride、storage_offset；改 <code>w[0, 0] = -1</code> 后 <code>y</code> 哪个位置变了？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_4">口诀</h2>
+<blockquote>
+<p>一排数加说明书：shape 说几行几列，stride 说一步跳几格，offset 说从哪开始；<br />
+view 只换说明书，转置跳着读不连续；stride 为 0 一份当多份。</p>
+</blockquote>
+<h2 id="_5">本章复习卡片</h2>
+<ul>
+<li>P03（Tensor = storage + shape + stride + offset；元素位置公式）</li>
+<li>P04（view 不复制、共用内存；转置后不连续，<code>view</code> 报错用 <code>reshape</code> / <code>contiguous</code>）</li>
+<li>P05（stride 0 = expand 广播不复制；<code>repeat</code> 才复制）</li>
+</ul>
+<h2 id="_6">附录 · 延伸阅读</h2>
+<blockquote>
+<p>★ 是建议先读的。</p>
+</blockquote>
+<h3 id="_7">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ ezyang「PyTorch internals」</td>
+<td>"Tensors" 与 "strides" 两节（〔在线〕blog.ezyang.com/2019/05/pytorch-internals/）</td>
+<td>本章的原型讲法，有 storage / stride 的经典示意图</td>
+</tr>
+<tr>
+<td>★ 官方文档 Tensor Views</td>
+<td>全文（〔在线〕）</td>
+<td>哪些操作返回 view 的完整列表</td>
+</tr>
+<tr>
+<td>Tensor-Puzzles（srush）</td>
+<td>前 5 题（〔在线〕github.com/srush/Tensor-Puzzles）</td>
+<td>只用广播和 <code>arange</code> 写函数，练 stride 思维</td>
+</tr>
+<tr>
+<td>CUDA 讲义 第 6 章 合并访存</td>
+<td>全章</td>
+<td>为什么不连续的读法在 GPU 上慢</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">数学原理</h3>
+<ul>
+<li><strong>行优先（row-major）的标准 stride</strong>：shape <span class="arithmatex">\((d_0, d_1, \dots, d_{n-1})\)</span> 的 contiguous stride 是 <span class="arithmatex">\(s_k = \prod_{m&gt;k} d_m\)</span>，最后一维是 1。例：(2, 3, 4) → (12, 4, 1)。</li>
+<li><strong>转置 = 交换 stride</strong>：对调第 a、b 维时，shape 和 stride 的第 a、b 项一起对调，storage 不动。</li>
+</ul>
+<h3 id="_9">公式 / 代码清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span class="arithmatex">\(\text{pos} = \text{offset} + \sum_k i_k s_k\)</span></td>
+<td>元素在 storage 中的位置</td>
+</tr>
+<tr>
+<td><code>x.stride()</code> / <code>x.storage_offset()</code> / <code>x.data_ptr()</code></td>
+<td>看说明书 / 看起点 / 看内存地址</td>
+</tr>
+<tr>
+<td><code>x.is_contiguous()</code> / <code>x.contiguous()</code></td>
+<td>是否标准排法 / 不是就复制成标准</td>
+</tr>
+<tr>
+<td><code>view</code> vs <code>reshape</code></td>
+<td>必须能不复制 vs 不行就复制</td>
+</tr>
+<tr>
+<td><code>expand</code> vs <code>repeat</code></td>
+<td>stride 0 假复制 vs 真复制</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_10">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch02_tensor_stride.py</code>，配套测试 <code>tests/test_ch01_06.py</code>；同一章的 notebook：<code>notebooks/ch02_tensor_stride.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch02_tensor_stride.py   # 一步一步打印  
+uv run pytest tests/test_ch01_06.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 说明书</td>
+<td>pos = offset + Σ iₖ sₖ</td>
+<td><code>describe(x)</code>、<code>position(0, (3, 1), (1, 2))</code></td>
+<td>stride (3, 1)；位置 5</td>
+</tr>
+<tr>
+<td>第二步 转置</td>
+<td>stride 对调</td>
+<td><code>describe(x.t())</code></td>
+<td>(3, 2)、stride (1, 3)、不连续</td>
+</tr>
+<tr>
+<td>第二步 切片</td>
+<td>offset 变</td>
+<td><code>describe(x[:, 1:])</code></td>
+<td>offset 1</td>
+</tr>
+<tr>
+<td>第三步 view 报错</td>
+<td>按行读 ≠ storage 顺序</td>
+<td><code>try_view_flat(x.t())</code></td>
+<td>报错；reshape 得 [0, 3, 1, 4, 2, 5]</td>
+</tr>
+<tr>
+<td>第四步 stride 0</td>
+<td>expand 不复制</td>
+<td><code>b.expand(4, 3).stride()</code></td>
+<td>(0, 1)；repeat 是 (3, 1)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">x = torch.arange(6).view(2, 3)
+x.stride(), x.storage_offset()           # (3, 1), 0
+t = x.t()                                # 只改说明书：stride (1, 3)
+x.data_ptr() == t.data_ptr()             # True：共用一块内存
+t.view(6)                                # RuntimeError：不连续
+t.reshape(6)                             # 能 view 就 view，不能就复制
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong><code>x[:, 1:]</code> 也不连续</strong>：shape (2, 2) 的标准 stride 是 (2, 1)，它是 (3, 1)，<code>is_contiguous()</code> 为 False。</li>
+<li><strong>报错信息很长</strong>：<code>view size is not compatible with input tensor's size and stride</code>，看到它就想到第三步。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>对 <code>torch.arange(24).view(2, 3, 4)</code> 调 <code>describe</code>，再 <code>permute(2, 0, 1)</code> 看 stride 怎么跟着换。</li>
+<li>用 <code>position</code> 手算一个三维张量元素的位置，再用下标取出来对一对。</li>
+</ul><nav class="pager"><a href="01-op-journey.html">← 第 1 章 · PyTorch 做了什么：一行 y = x @ w 的旅程</a><a href="03-dispatcher.html">第 3 章 · 分派器：按标签一层层处理 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 1 章 · PyTorch 做了什么：一行 y = x @ w 的旅程 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="1-pytorch-y-x-w">第 1 章 · PyTorch 做了什么：一行 <code>y = x @ w</code> 的旅程</h1><p><a class="btn" href="../animations/01-op-journey.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：numpy 也能做矩阵乘法，PyTorch 多做了什么？你写下一行 <code>y = x @ w</code>，它在 PyTorch 里面经过了哪几站？<br />
+讲解日期：2026-11-05 · 上一章：无 · 下一章：<a href="../lessons/02-tensor-stride.html">第 2 章 Tensor 内部</a><br />
+对应原文：00-overview.md §1–§2.2</p>
+<p>本章缩写：GPU / CPU = Graphics / Central Processing Unit（图形 / 中央 处理单元）；MPS = Metal Performance Shaders（Apple 的 Metal 性能着色器，Mac 上的 GPU 后端）；API = Application Programming Interface（应用 / 编程 / 接口）；mm = matrix multiply（矩阵乘法）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="numpy-pytorch-2026-11-05">第一步：numpy 已经能算，PyTorch 多了两件大事（2026-11-05）</h3>
+<p><strong>先看一行代码</strong>：</p>
+<pre><code class="language-python">y = x @ w        # x 是输入，w 是权重，@ 是矩阵乘法
+</code></pre>
+<p>numpy 也能写这行，算出来的数一模一样。那为什么训练模型都用 PyTorch？因为训练要的不只是"算出 y"，还要两件 numpy 不管的事：</p>
+<ol>
+<li><strong>在 GPU 上算</strong>。模型里有上亿次乘加，CPU 太慢。PyTorch 里同一行代码，只要 <code>x</code>、<code>w</code> 放在 GPU 上（<code>x = x.to("cuda")</code>；Mac 上是 <code>"mps"</code>），就自动换成 GPU 版本去算，代码一个字不用改。</li>
+<li><strong>自动求导（autograd）</strong>。训练 = 不断调整 <code>w</code>，让结果变好。"往哪个方向调、调多少"要靠<strong>梯度</strong>（结果对 <code>w</code> 的变化有多敏感）。PyTorch 在你算 <code>y</code> 的同时，<strong>悄悄记下"y 是怎么算出来的"</strong>；之后调一句 <code>loss.backward()</code>，它就照着这份记录倒推出每个参数的梯度。你只写前向，反向它帮你做。</li>
+</ol>
+<p><strong>类比：做菜。</strong> numpy 是一个只会炒菜的厨师。PyTorch 是一整家餐厅：
+- 有好几个厨房（CPU 厨房、GPU 厨房），大单子送去火力猛的 GPU 厨房；
+- 每做一道菜，旁边有个记账员把"用了哪些原料、按什么顺序做的"记在账本上。以后想知道"盐多放一点味道会怎么变"，翻账本倒着查就行，不用重做实验。</p>
+<p><strong>要不要记账，你说了算</strong>：给参数打上 <code>requires_grad=True</code>（<code>nn.Linear</code> 里的权重默认就是），用到它的运算才会被记账。推理时不需要梯度，可以包在 <code>torch.inference_mode()</code> 里，整段都不记，省时间也省显存。</p>
+<p><strong>一句话</strong>：PyTorch = 能在 GPU 上跑的 numpy + 一个自动记账、能倒推梯度的记账员；在这之上再加 <code>nn</code>（搭模型）、<code>optim</code>（调参数）、<code>DataLoader</code>（喂数据）、<code>distributed</code>（多卡）等工具。</p>
+<h3 id="2026-11-05">第二步：一行代码经过的四站（2026-11-05）</h3>
+<p>你按下回车，<code>y = x @ w</code> 在 PyTorch 里走了四站。还是用餐厅来对照：</p>
+<table>
+<thead>
+<tr>
+<th>站</th>
+<th>PyTorch 里叫</th>
+<th>餐厅里是</th>
+<th>做什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>①</td>
+<td><strong>Python 前端</strong></td>
+<td>服务员</td>
+<td>接住你写的 <code>x @ w</code>，翻译成 C++ 能懂的一张单子（PyTorch 的核心是 C++ 写的，Python 只是外壳）</td>
+</tr>
+<tr>
+<td>②</td>
+<td><strong>分派器（Dispatcher）</strong></td>
+<td>前台调度</td>
+<td>看单子上的<strong>标签</strong>决定交给谁：要不要记账？去哪个厨房？</td>
+</tr>
+<tr>
+<td>③</td>
+<td><strong>Autograd（记账）</strong></td>
+<td>记账员</td>
+<td>如果 <code>x</code> 或 <code>w</code> 要求梯度，就在账本上记一笔"这里做过一次矩阵乘法，用的是 x 和 w"；不要求就跳过这一站</td>
+</tr>
+<tr>
+<td>④</td>
+<td><strong>Kernel（厨房）</strong></td>
+<td>厨房</td>
+<td>真正做乘法的那段代码。CPU 厨房和 GPU 厨房各有一份，前台按 <code>x</code> 在哪个设备上选一个</td>
+</tr>
+</tbody>
+</table>
+<p><strong>分派器到底看什么</strong>：每个张量身上贴着几个标签，比如"要记账"、"在 GPU 上"。分派器按固定顺序处理标签：<strong>先处理"要记账"</strong>（交给第 ③ 站记一笔），记完把这个标签撕掉，<strong>再看"在哪个设备"</strong>（交给第 ④ 站对应的厨房）。所以准确地说，分派器是被问了两次：第一次决定"记不记账"，第二次决定"哪个厨房"。</p>
+<p>（2026-11-14 补充：为了好懂，这里把"要记账"说成一张有或没有的标签。实际上 CPU / GPU 张量身上<strong>一直</strong>带着 Autograd 标签，记账员每次都会被叫到，他看一眼"有没有输入要梯度"，没有就什么都不记、直接放行。效果和"跳过这一站"一样。准确版本见<a href="../lessons/03-dispatcher.html">第 3 章</a>。）</p>
+<p><strong>结果上能看到的痕迹</strong>：算完的 <code>y</code> 身上带着一张小纸条 <code>grad_fn=&lt;MmBackward0&gt;</code>，意思是"我是由一次矩阵乘法（mm）算出来的，反向时找 MmBackward0"。这就是第 ③ 站记下的那一笔。没记账时，<code>y.grad_fn</code> 是 <code>None</code>。</p>
+<pre><code class="language-python">import torch
+x = torch.randn(2, 3)
+w = torch.randn(3, 4, requires_grad=True)   # w 要求梯度 → 会记账
+y = x @ w
+print(y.grad_fn)        # &lt;MmBackward0 object at ...&gt;
+
+with torch.inference_mode():                # 这一段都不记账
+    y2 = x @ w
+print(y2.grad_fn)       # None
+</code></pre>
+<p><strong>为什么要拆成这么多站</strong>：因为"记账"、"选厨房"互不相干，拆开以后可以随意组合。以后要加新功能，比如"自动把数换成更省空间的低精度"（混合精度，第 26 章），只要在分派器里多加一种标签、多加一站，上千个算子都不用改。</p>
+<p><strong>一句话</strong>：一行 <code>x @ w</code> = 服务员接单（Python 前端）→ 前台看标签（分派器）→ 需要的话记账员记一笔（autograd）→ 对应设备的厨房做菜（kernel）。</p>
+<h3 id="_2">动画演示：一行代码的旅程</h3>
+<p><img alt="一行代码的旅程" src="../animations/01-op-journey.gif" /></p>
+<p>可交互版：<a href="../animations/01-op-journey.html">animations/01-op-journey.html</a>（要能点按钮，需要用本地服务打开，见 <a href="../animations/index.html">animations/README.md</a>"跑起来看"）。两个开关：<strong>要不要记账</strong>（<code>requires_grad</code>）、<strong>放在哪个设备</strong>（CPU / GPU）。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>单子 <code>x @ w</code> 从左往右走四站；</li>
+<li>到分派器时，右边的标签表里亮起的那一格就是它这一次的选择：先看"要记账"，再看"设备"；</li>
+<li>最右边是结果 <code>y</code> 和它身上的 <code>grad_fn</code> 纸条；</li>
+<li>做题 3 之前先别拨开关，答完再自己拨两个开关验证。</li>
+</ol>
+<h2 id="_3">练习与作答记录</h2>
+<p><strong>题 1</strong>：numpy 也能算 <code>x @ w</code>。用自己的话说，PyTorch 比 numpy 多做的两件大事是什么？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：按顺序说出 <code>y = x @ w</code> 经过的四站，每站用餐厅里的一个角色对应，并说一句它做什么。</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：下面两种情况，四站里哪一站的行为不同？
+- (a) <code>w</code> 从 <code>requires_grad=True</code> 改成 <code>False</code>（<code>x</code> 本来就不要求梯度）；
+- (b) <code>x</code>、<code>w</code> 从 CPU 搬到 GPU。</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_4">口诀</h2>
+<blockquote>
+<p>numpy 只会炒，PyTorch 开餐厅：多个厨房（GPU），一个记账员（autograd）；<br />
+一行代码四站走：服务员接单，前台看标签，记账员记一笔，厨房来下锅。</p>
+</blockquote>
+<h2 id="_5">本章复习卡片</h2>
+<ul>
+<li>P01（PyTorch 比 numpy 多做的两件事：GPU 计算 + 自动求导）</li>
+<li>P02（一行代码的四站：Python 前端 → 分派器 → autograd → kernel；分派器先看"记不记账"再看"哪个设备"）</li>
+</ul>
+<h2 id="_6">附录 · 延伸阅读</h2>
+<blockquote>
+<p>留给以后深入学习用，不影响本章主线。★ 是建议先读的。</p>
+</blockquote>
+<h3 id="_7">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ 本专题总地图</td>
+<td>00-overview.md §1–§2.2</td>
+<td>本章内容的完整版：四件事、分层架构图、dispatch key 怎么叠层</td>
+</tr>
+<tr>
+<td>★ Edward Z. Yang，「PyTorch internals」（博客，2019）</td>
+<td>全文；重点"Tensor"和"dispatch"两节</td>
+<td>PyTorch 核心开发者讲 Tensor 结构与分派器；年代早，但骨架没变（在线，本地无文本）</td>
+</tr>
+<tr>
+<td>PyTorch 官方文档：Autograd mechanics</td>
+<td>"How autograd encodes the history" 一节</td>
+<td>第 ③ 站的官方说明：<code>grad_fn</code>、DAG、<code>requires_grad</code> 的传播规则；第 4 章细讲</td>
+</tr>
+<tr>
+<td>PyTorch 官方文档：Extending dispatcher for a new backend / "Dispatcher in C++" 教程</td>
+<td>dispatch key 列表</td>
+<td>第 ② 站的官方说明；第 3 章细讲</td>
+</tr>
+<tr>
+<td>AISPE 第 14 章</td>
+<td><code>ai-infra/materials/ai-systems-performance-engineering/docs/chapters/ch14.md</code> L19–L39</td>
+<td>eager 之外的另一条路（torch.compile）总览，第 6 章再读</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">数学原理</h3>
+<ul>
+<li><strong>梯度</strong>：<span class="arithmatex">\(\frac{\partial L}{\partial w}\)</span>，结果 <span class="arithmatex">\(L\)</span> 对参数 <span class="arithmatex">\(w\)</span> 的变化有多敏感；训练按 <span class="arithmatex">\(w \leftarrow w - \eta \frac{\partial L}{\partial w}\)</span> 更新（<span class="arithmatex">\(\eta\)</span> 是学习率）。第 4 章展开。</li>
+<li><strong>为什么记账就能求导</strong>：任何复杂计算都是一串简单运算拼起来的；每个简单运算的导数公式已知，<strong>链式法则</strong>把它们乘起来就是整体的导数。账本记下"拼的顺序"，反向就是按这个顺序倒着乘。第 4 章展开。</li>
+</ul>
+<h3 id="_9">公式 / 代码清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>x.to("cuda")</code> / <code>x.to("mps")</code></td>
+<td>把张量搬到 GPU（Mac 上是 MPS），之后的运算自动走 GPU 厨房</td>
+</tr>
+<tr>
+<td><code>requires_grad=True</code></td>
+<td>要求记账，用到它的运算会被记录</td>
+</tr>
+<tr>
+<td><code>y.grad_fn</code></td>
+<td><code>y</code> 是由哪种运算算出来的（账本上的那一笔）；没记账时为 <code>None</code></td>
+</tr>
+<tr>
+<td><code>torch.inference_mode()</code></td>
+<td>这一段都不记账（推理用）</td>
+</tr>
+<tr>
+<td><code>loss.backward()</code></td>
+<td>照账本倒推梯度（第 4 章）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_10">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>PyTorch 本身就是代码，所以这一节直接用 torch 2.15.0 把讲义里的每个数字跑一遍；测试负责核对和讲义一致。uv 是 Python 的项目和依赖管理工具，<code>uv run</code> 会自动装好 torch、einops、torchao 等依赖。从这一章起每章附录都有这一节。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch01_op_journey.py</code>，配套测试 <code>tests/test_ch01_06.py</code>；同一章的 notebook：<code>notebooks/ch01_op_journey.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch01_op_journey.py   # 一步一步打印  
+uv run pytest tests/test_ch01_06.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 本机 GPU 后端</td>
+<td>—</td>
+<td><code>torch.backends.mps.is_available()</code></td>
+<td>Mac 上是 mps</td>
+</tr>
+<tr>
+<td>第二步 要梯度</td>
+<td>账本记一笔</td>
+<td><code>journey(True)[1]</code></td>
+<td><code>MmBackward0</code></td>
+</tr>
+<tr>
+<td>第二步 不要梯度</td>
+<td>记账员放行</td>
+<td><code>journey(False)[1]</code></td>
+<td><code>None</code></td>
+</tr>
+<tr>
+<td>第二步 inference_mode</td>
+<td>整段不记账</td>
+<td><code>journey_inference()[1]</code></td>
+<td><code>None</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">x = torch.randn(2, 3, device=device)
+w = torch.randn(3, 4, device=device, requires_grad=requires_grad)
+y = x @ w                       # 前端 → 分派器 → autograd → kernel
+y.grad_fn                       # 记了账就是 &lt;MmBackward0&gt;，没记就是 None
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong><code>grad_fn</code> 的类名后面带 0</strong>：<code>MmBackward0</code> 里的 0 是版本号，不是第 0 个节点。</li>
+<li><strong><code>device</code> 一个参数就换厨房</strong>：同一个 <code>journey</code> 把 <code>device</code> 换成 <code>"mps"</code> 就走 GPU，函数体一个字不用改。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>把 <code>journey</code> 里的 <code>x</code> 也设成 <code>requires_grad=True</code>，看 <code>y.grad_fn</code> 变不变。</li>
+<li>在 Mac 上调 <code>journey(True, "mps")</code>，看结果张量的 <code>device</code>。</li>
+</ul><nav class="pager"><span></span><a href="02-tensor-stride.html">第 2 章 · Tensor 内部：一块内存 + 一张&quot;怎么读&quot;的说明书 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

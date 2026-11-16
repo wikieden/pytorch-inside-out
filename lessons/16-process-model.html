@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 16 章 · 进程模型：一张卡一个进程，靠编号分工 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="16">第 16 章 · 进程模型：一张卡一个进程，靠编号分工</h1><p><a class="btn" href="../animations/16-ranks.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：多卡训练时到底有几个 Python 进程？rank、world_size、local_rank 分别是什么？<code>torchrun</code> 帮我们做了什么？NCCL 和 Gloo 怎么选？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/15-loss-optimizer.html">第 15 章 损失与优化器</a> · 下一章：<a href="../lessons/17-collectives.html">第 17 章 集合通信</a><br />
+对应原文：00-overview.md §5.1；AISPE ch03 DDP 示例（<code>ai-infra/materials/ai-systems-performance-engineering/docs/chapters/ch03.md</code> 第 263–440 行）；AISPE ch13「使用 PyTorch 分布式扩展」（<code>ch13.md</code> 第 1562–1619 行）；官方文档 torchrun（〔在线〕）；本章输出在本机用 Gloo 后端起 2 个进程跑过</p>
+<p>本章缩写：SPMD = Single Program, Multiple Data（单 / 程序、多 / 数据）；NCCL = NVIDIA Collective Communications Library（NVIDIA 集合 / 通信 / 库，读作 "nickel"）；Gloo = Facebook 的 CPU 通信库（名字不是缩写）；c10d = PyTorch 分布式通信层的名字（c10 + distributed）；rdzv = rendezvous（会合，进程们互相找到对方）；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="spmd-n-2026-11-14">第一步：SPMD——同一份脚本，跑 N 份（2026-11-14）</h3>
+<p><strong>类比：考场。</strong> 8 个考生（进程）拿到<strong>同一份试卷</strong>（脚本），但每人有自己的<strong>座位号</strong>（rank），试卷上写着"座位号 0 的做第 1 题，座位号 1 的做第 2 题……"。大家各自做，需要对答案时再通过监考（通信库）交换。</p>
+<p>PyTorch 多卡训练的主流做法就是这样，叫 <strong>SPMD</strong>：</p>
+<ul>
+<li><strong>每张 GPU 一个进程</strong>，8 卡就是 8 个 Python 进程；</li>
+<li>每个进程跑<strong>完全相同</strong>的脚本；</li>
+<li>脚本里用自己的编号决定"用哪张卡、读哪部分数据"。</li>
+</ul>
+<p>为什么不用一个进程管 8 张卡（老的 <code>nn.DataParallel</code> 就是这样）？因为 Python 有全局解释器锁（GIL，Global Interpreter Lock），一个进程同一时刻只能跑一个线程的 Python 代码，8 张卡排队等一个 Python，跑不满。</p>
+<p><strong>一句话</strong>：多卡训练 = 每卡一个进程跑同一份脚本，靠编号分工。</p>
+<h3 id="2026-11-14">第二步：三个编号（2026-11-14）</h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>意思</th>
+<th>2 台机器 × 4 卡的例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>world_size</code></td>
+<td>一共几个进程</td>
+<td>8</td>
+</tr>
+<tr>
+<td><code>rank</code></td>
+<td>我是全局第几号（0 到 world_size − 1）</td>
+<td>机器 0 上是 0–3，机器 1 上是 4–7</td>
+</tr>
+<tr>
+<td><code>local_rank</code></td>
+<td>我是<strong>本机</strong>第几号 → 决定用哪张卡</td>
+<td>两台机器上都是 0–3</td>
+</tr>
+</tbody>
+</table>
+<p><strong>数字演示</strong>：机器 1 上的第 2 张卡：<code>local_rank = 2</code>，<code>rank = 1 × 4 + 2 = 6</code>。</p>
+<p>代码里：</p>
+<pre><code class="language-python">import os, torch, torch.distributed as dist
+dist.init_process_group(&quot;nccl&quot;)                       # 进程们互相找到对方，建立通信
+local_rank = int(os.environ[&quot;LOCAL_RANK&quot;])
+torch.cuda.set_device(local_rank)                     # 我用第 local_rank 张卡
+rank, world = dist.get_rank(), dist.get_world_size()
+</code></pre>
+<p><strong>rank 0 的特殊身份</strong>：习惯上只有 rank 0 打日志、存 checkpoint（第 22 章的分布式 checkpoint 例外，要大家一起存）。其他 rank 也打印的话，屏幕上会有 8 份重复输出。</p>
+<p><strong>一句话</strong>：world_size 是总人数，rank 是全局座位号，local_rank 是本机座位号（决定用哪张卡）；rank 0 管日志。</p>
+<h3 id="torchrun-2026-11-14">第三步：torchrun 帮你起进程、发编号（2026-11-14）</h3>
+<p>你不用自己开 8 个进程。<strong>torchrun</strong> 负责：在每台机器上起 N 个进程，给每个进程设好环境变量，让它们通过 <strong>rendezvous（会合）</strong> 互相找到。</p>
+<pre><code class="language-bash"># 单机 8 卡
+torchrun --nproc_per_node=8 train.py
+
+# 两台机器各 4 卡（两台都要执行，node_rank 不同）
+torchrun --nnodes=2 --nproc_per_node=4 --node_rank=0 \
+         --rdzv_backend=c10d --rdzv_endpoint=$MASTER_IP:29500 train.py
+</code></pre>
+<p>torchrun 给每个进程设的环境变量：<code>RANK</code>、<code>LOCAL_RANK</code>、<code>WORLD_SIZE</code>、<code>MASTER_ADDR</code>、<code>MASTER_PORT</code>。<code>init_process_group</code> 读这些变量连到"主节点"的那个端口，大家报到齐了才往下走。</p>
+<p><strong>本机实测</strong>（Mac，2 个进程，Gloo 后端）：</p>
+<pre><code>[rank 0] LOCAL_RANK 0 WORLD_SIZE 2 MASTER 127.0.0.1 29511
+[rank 1] LOCAL_RANK 1 WORLD_SIZE 2 MASTER 127.0.0.1 29511
+</code></pre>
+<p><strong>Mac 上的坑</strong>：直接 <code>torchrun --nproc_per_node=2</code> 会卡住不动（Gloo 找错了网卡）。要指定本地回环：</p>
+<pre><code class="language-bash">GLOO_SOCKET_IFNAME=lo0 torchrun --nproc_per_node=2 --master_addr=127.0.0.1 --master_port=29511 script.py
+</code></pre>
+<p><strong>一句话</strong>：torchrun 起进程、设 RANK / LOCAL_RANK / WORLD_SIZE / MASTER_ADDR，进程们在主节点会合；Mac 上要指定 lo0。</p>
+<h3 id="2026-11-14_1">第四步：通信后端与数据切分（2026-11-14）</h3>
+<table>
+<thead>
+<tr>
+<th>后端</th>
+<th>用在</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>NCCL</strong></td>
+<td>GPU 之间</td>
+<td>NVIDIA 的库，走 NVLink（机内卡间高速互连）和 InfiniBand / RoCE（机间网络），GPU 训练只用它</td>
+</tr>
+<tr>
+<td><strong>Gloo</strong></td>
+<td>CPU 之间</td>
+<td>本机练习、CPU 训练、部分控制信息</td>
+</tr>
+<tr>
+<td>MPI</td>
+<td>超算集群</td>
+<td>要另外编译</td>
+</tr>
+</tbody>
+</table>
+<p>每个进程要读<strong>不同</strong>的数据，不然 8 张卡算的是同一批，白算。用第 8 章说过的 <code>DistributedSampler</code>：</p>
+<pre><code class="language-python">sampler = DistributedSampler(dataset)          # 自动读 rank、world_size
+loader = DataLoader(dataset, batch_size=32, sampler=sampler)
+for epoch in range(E):
+    sampler.set_epoch(epoch)                   # 每轮打乱方式不同
+    for x, y in loader: ...
+</code></pre>
+<p>它把下标按 rank 隔着分：rank 0 拿 0、8、16……，rank 1 拿 1、9、17……。这时 <code>batch_size=32</code> 是<strong>每张卡</strong> 32，全局 batch = 32 × 8 = 256。</p>
+<p><strong>一句话</strong>：GPU 用 NCCL、CPU 用 Gloo；DistributedSampler 让每个 rank 读不同样本，全局 batch = 每卡 batch × 卡数。</p>
+<h3 id="2-4">动画演示：2 台机器 × 4 卡的编号</h3>
+<p><img alt="进程编号" src="../animations/16-ranks.gif" /></p>
+<p>可交互版：<a href="../animations/16-ranks.html">animations/16-ranks.html</a>。滑块调机器数和每台卡数。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>每个方块是一个进程（一张卡），上面写 rank，下面写 local_rank；</li>
+<li>播放时 torchrun 依次在每台机器上起进程，所有进程连到主节点会合；</li>
+<li>最后每个进程领到自己那份数据下标（DistributedSampler 隔着分）。</li>
+</ol>
+<h2 id="_2">练习与作答记录</h2>
+<p><strong>题 1</strong>：4 台机器、每台 8 卡。world_size 是多少？机器 2（从 0 数）上 local_rank = 5 的进程，rank 是多少？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：为什么现在不用一个进程管所有卡（<code>nn.DataParallel</code>），而是每卡一个进程？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：单机 6 卡，每卡 <code>batch_size=16</code>，DistributedSampler。全局 batch 是多少？rank 2 在第一个 epoch 拿到的前 3 个样本下标是哪些（不打乱时）？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_3">口诀</h2>
+<blockquote>
+<p>一卡一进程，同一份脚本，靠编号分工；<br />
+world_size 总人数，rank 全局号，local_rank 定用哪张卡，rank 0 管日志；<br />
+torchrun 起进程发编号、主节点会合；GPU 用 NCCL，Sampler 隔着分，每轮 set_epoch。</p>
+</blockquote>
+<h2 id="_4">本章复习卡片</h2>
+<ul>
+<li>P54（SPMD：每卡一进程跑同一脚本；为什么不用单进程多卡：GIL）</li>
+<li>P55（rank / local_rank / world_size；rank = 机器号 × 每机卡数 + local_rank；rank 0 管日志）</li>
+<li>P56（torchrun 设的环境变量；Mac 本机要 GLOO_SOCKET_IFNAME=lo0 + master_addr 127.0.0.1）</li>
+<li>P57（NCCL / Gloo；DistributedSampler 隔着分；全局 batch = 每卡 batch × 卡数）</li>
+</ul>
+<h2 id="_5">附录 · 延伸阅读</h2>
+<h3 id="_6">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ AISPE 第 3 章</td>
+<td><code>ch03.md</code> 第 263–440 行</td>
+<td>一个完整的 DDP 脚本（init、set_device、包装模型）</td>
+</tr>
+<tr>
+<td>★ 官方文档 torchrun（Elastic Launch）</td>
+<td>"Usage"、"Environment Variables"（〔在线〕）</td>
+<td>所有启动参数和环境变量</td>
+</tr>
+<tr>
+<td>Ultra-Scale Playbook</td>
+<td>§A0 Parallel Programming Crash Course（<code>ultrascale-playbook.md</code> 第 3275 行起）</td>
+<td>进程 / 通信基础</td>
+</tr>
+<tr>
+<td>多机报告</td>
+<td><code>distributed-pretraining/notes/03-engineering-report.md</code> §7.3 NCCL 与启动</td>
+<td>真集群上的 NCCL 环境变量和坑</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_7">数学原理</h3>
+<ul>
+<li><strong>rank 编号</strong>：<span class="arithmatex">\(\text{rank} = \text{node\_rank} \times \text{nproc\_per\_node} + \text{local\_rank}\)</span>。</li>
+<li><strong>DistributedSampler 的切分</strong>：rank <span class="arithmatex">\(r\)</span> 拿下标 <span class="arithmatex">\(\{r, r + W, r + 2W, \dots\}\)</span>（W = world_size；打乱时先打乱再这样取），样本数不能整除时默认补齐重复几个。</li>
+</ul>
+<h3 id="_8">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dist.init_process_group("nccl" / "gloo")</code></td>
+<td>建通信</td>
+</tr>
+<tr>
+<td><code>dist.get_rank()</code> / <code>get_world_size()</code> / <code>os.environ["LOCAL_RANK"]</code></td>
+<td>三个编号</td>
+</tr>
+<tr>
+<td><code>torchrun --nnodes --nproc_per_node --node_rank --rdzv_endpoint</code></td>
+<td>启动</td>
+</tr>
+<tr>
+<td><code>DistributedSampler(ds)</code> + <code>set_epoch(e)</code></td>
+<td>切数据</td>
+</tr>
+<tr>
+<td><code>dist.destroy_process_group()</code></td>
+<td>结束时清理</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。分布式各章用 <code>dist_util.run</code> 在本机起 2 个 Gloo 进程（Mac 上自动设好 <code>GLOO_SOCKET_IFNAME=lo0</code>，第 16 章的坑），不需要 GPU。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch16_process_model.py</code>，配套测试 <code>tests/test_ch16_22.py</code>；同一章的 notebook：<code>notebooks/ch16_process_model.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch16_process_model.py   # 一步一步打印  
+uv run pytest tests/test_ch16_22.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第二步 rank 编号</td>
+<td>node × nproc + local</td>
+<td><code>global_rank(1, 4, 2)</code></td>
+<td>6</td>
+</tr>
+<tr>
+<td>第三步 两个进程报到</td>
+<td>torchrun 设的环境变量</td>
+<td><code>run(whoami)</code></td>
+<td>rank 0 / 1，local 0 / 1</td>
+</tr>
+<tr>
+<td>第四步 Sampler</td>
+<td>隔着分</td>
+<td><code>sampler_indices(100, 8, r)</code></td>
+<td>rank 0 [0, 8, 16]，rank 1 [1, 9, 17]</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">os.environ.update(MASTER_ADDR=&quot;127.0.0.1&quot;, MASTER_PORT=..., RANK=..., WORLD_SIZE=...)
+os.environ.setdefault(&quot;GLOO_SOCKET_IFNAME&quot;, &quot;lo0&quot;)      # Mac 上不设会卡住
+dist.init_process_group(&quot;gloo&quot;, rank=rank, world_size=world)
+mp.spawn(_worker, args=(...), nprocs=world)
+</code></pre>
+<p><strong>代码里才看得到的 2 件事</strong>：</p>
+<ol>
+<li><strong>代码里用 <code>mp.spawn</code> 代替 torchrun</strong>：效果一样，都是起 N 个进程、设好环境变量；测试里更方便。</li>
+<li><strong>传给 <code>run</code> 的函数必须在模块顶层</strong>：子进程要能按名字导入它。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li><code>run(whoami, world=4)</code> 起 4 个进程。</li>
+<li><code>sampler_indices(10, 4, 3)</code> 看样本数不能整除时怎么补。</li>
+</ul><nav class="pager"><a href="15-loss-optimizer.html">← 第 15 章 · 损失与优化器：cross_entropy 的细节和 AdamW 的一步</a><a href="17-collectives.html">第 17 章 · 集合通信：五个动词和它们的代价 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>

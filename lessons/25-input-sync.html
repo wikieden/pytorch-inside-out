@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 25 章 · 让 GPU 别等：数据管道与同步点 · PyTorch 从里到外</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1f2328;--mute:#5d6470;--line:#e3e5e8;--card:#fff;--acc:#2f6fdf;--code:#f2f3f5;--quote:#f4f6fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}}
+:root[data-theme="dark"]{--bg:#15181d;--fg:#e4e7ec;--mute:#9aa3b2;--line:#2c323b;--card:#1c2026;--acc:#7aa7ff;--code:#22272f;--quote:#1b2029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif}
+a{color:var(--acc)}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .in{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}
+header.top .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header.top a{text-decoration:none}
+main{max-width:860px;margin:0 auto;padding:24px 16px 72px;overflow-wrap:anywhere}
+h1{font-size:28px;line-height:1.35;margin:8px 0 16px} h2{font-size:22px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)} h3{font-size:18px;margin:28px 0 8px}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fff}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--quote);border-left:3px solid var(--acc);border-radius:4px;color:var(--mute)}
+blockquote p{margin:4px 0}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto} pre code{padding:0;background:none}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top} th{background:var(--code)}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--card)}
+details[open]{padding-bottom:10px} summary{cursor:pointer;color:var(--acc);font-weight:500}
+mjx-container{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.btn{display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;border:1px solid var(--acc);border-radius:999px;text-decoration:none;font-size:14px}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--acc)} .card img{border:0;border-bottom:1px solid var(--line);border-radius:0;aspect-ratio:16/10;object-fit:contain;width:100%}
+.card .no{color:var(--mute);font-size:13px;padding:8px 12px 0} .card .t{padding:0 12px 12px;font-weight:500;line-height:1.5}
+.lead{font-size:17px;color:var(--mute)}
+footer{max-width:860px;margin:0 auto;padding:0 16px 40px;color:var(--mute);font-size:13px}
+</style>
+<script>window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true,processEnvironments:true}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html">PyTorch 从里到外</a>
+<a href="../lessons/index.html">讲义目录</a>
+<a href="../animations/index.html">动画</a>
+<a href="../review.html">复习卡片</a>
+<a href="../lessons/appendix-glossary.html">缩写表</a>
+</div></header>
+<main>
+<h1 id="25-gpu">第 25 章 · 让 GPU 别等：数据管道与同步点</h1><p><a class="btn" href="../animations/25-input-pipeline.html">▶ 打开本章可交互动画</a></p>
+<blockquote>
+<p>本章回答：怎么量出"GPU 有多少时间在等数据"？从读硬盘到进显存，每一段怎么提速？训练循环里藏着哪些同步点，怎么一次性把它们找出来？<br />
+讲解日期：2026-11-14 · 上一章：<a href="../lessons/24-profiler.html">第 24 章 profiler</a> · 下一章：<a href="../lessons/26-mixed-precision.html">第 26 章 混合精度</a><br />
+对应原文：AISPE ch13「优化数据输入流水线」（<code>ch13.md</code> 第 1552–1561 行）、「重叠通信和计算」中的数据预取例子（第 1021–1097 行）；官方文档 CUDA semantics「Use pinned memory buffers」、<code>torch.cuda.set_sync_debug_mode</code>（〔在线〕）；本讲义 <a href="../lessons/05-cuda-semantics.html">第 5 章</a>、<a href="../lessons/08-dataloader.html">第 8 章</a></p>
+<p>本章缩写：H2D = Host to Device（主机到设备，CPU 内存拷进显存）；memmap = memory-mapped file（内存映射文件）；I/O = Input/Output；全部缩写见 <a href="../lessons/appendix-glossary.html">附录 · 缩写与术语表</a></p>
+</blockquote>
+<h2 id="_1">讲解</h2>
+<h3 id="2026-11-14">第一步：先量出"等数据"的时间（2026-11-14）</h3>
+<p><strong>类比：厨房出菜慢，先分清是"等食材"还是"炒得慢"。</strong></p>
+<p>最简单的量法：给一步训练拆两段计时。</p>
+<pre><code class="language-python">t0 = time.perf_counter()
+for x, y in loader:
+    t1 = time.perf_counter()                 # 拿到这一批：t1 - t0 是等数据的时间
+    x, y = x.to(dev, non_blocking=True), y.to(dev, non_blocking=True)
+    loss = train_step(x, y)
+    torch.cuda.synchronize()                 # 只在测量时加！平时不要
+    t2 = time.perf_counter()                 # t2 - t1 是训练的时间
+    log(data=t1 - t0, compute=t2 - t1)
+    t0 = time.perf_counter()
+</code></pre>
+<p><strong>数字演示</strong>：测得等数据 18 ms、训练 30 ms → 每步 48 ms，<strong>GPU 有 37.5% 的时间在等数据</strong>。如果数据时间接近 0，瓶颈就不在数据，别在这里花功夫（第 23 章：只改瓶颈）。</p>
+<p>注意那个 <code>synchronize()</code>：为了测准才加（第 5 章），<strong>测完要删掉</strong>，它本身就是同步点。</p>
+<p><strong>一句话</strong>：把每步拆成"等数据"和"算"两段计时，数据段接近 0 就别优化数据。</p>
+<h3 id="2026-11-14_1">第二步：数据从硬盘到显存的四段路（2026-11-14）</h3>
+<pre><code>硬盘 ──① 读取──▶ CPU 内存 ──② 解码 / 增强 / 分词──▶ 张量 ──③ 拼 batch──▶ 锁页内存 ──④ 拷进显存──▶ GPU
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>段</th>
+<th>慢的表现</th>
+<th>提速办法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① 读取</td>
+<td>网络盘、海量小文件</td>
+<td>打包成大分片文件（WebDataset、Arrow、二进制 token 文件）；本地 SSD 缓存；<code>np.memmap</code> 按需读</td>
+</tr>
+<tr>
+<td>② 处理</td>
+<td>图片解码、分词占满 CPU</td>
+<td><strong>离线</strong>预处理（预先分词存成 token 数组，CS336 a1 就是这么做）；<code>num_workers</code> 并行（第 8 章）；GPU 上做增强</td>
+</tr>
+<tr>
+<td>③ 拼 batch</td>
+<td>大量 Python 对象</td>
+<td>让 <code>__getitem__</code> 直接返回张量；collate 别做重活</td>
+</tr>
+<tr>
+<td>④ 拷贝</td>
+<td>拷贝和计算串行</td>
+<td><code>pin_memory=True</code> + <code>non_blocking=True</code>；或者用单独的 stream 提前拷下一批（第 5 章第三步，AISPE ch13 第 1021–1097 行）</td>
+</tr>
+</tbody>
+</table>
+<p>LLM 预训练的标准做法：<strong>提前把全部语料分词成 uint16 / uint32 的 token 数组存盘</strong>，训练时 memmap 打开，每步随机切几个定长片段——第 ① ② ③ 段几乎都没了，只剩一次小拷贝。</p>
+<p><strong>一句话</strong>：读取、处理、拼 batch、拷贝四段；能离线做的离线做（预分词），剩下的并行（workers）和异步（pin + non_blocking）。</p>
+<h3 id="2026-11-14_2">第三步：把同步点一次性揪出来（2026-11-14）</h3>
+<p>第 5 章列过同步点清单。实际代码里它们常常藏得很深：</p>
+<table>
+<thead>
+<tr>
+<th>藏在哪</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>日志</td>
+<td><code>wandb.log({"loss": loss.item()})</code> 每步一次</td>
+</tr>
+<tr>
+<td>指标</td>
+<td><code>acc = (pred == y).float().mean().item()</code></td>
+</tr>
+<tr>
+<td>梯度裁剪后看范数</td>
+<td><code>if gnorm &gt; 10: print(...)</code></td>
+</tr>
+<tr>
+<td>数据相关形状</td>
+<td><code>x[mask]</code>、<code>torch.nonzero</code>、<code>torch.unique</code></td>
+</tr>
+<tr>
+<td>默认参数</td>
+<td>某些库函数内部调了 <code>.cpu()</code></td>
+</tr>
+<tr>
+<td>CPU 张量参与 GPU 运算</td>
+<td><code>gpu_t * torch.tensor(2.0)</code> 没问题（标量），但 <code>gpu_t[cpu_index_tensor]</code> 会触发拷贝</td>
+</tr>
+</tbody>
+</table>
+<p><strong>自动报警</strong>（CUDA）：</p>
+<pre><code class="language-python">torch.cuda.set_sync_debug_mode(&quot;warn&quot;)    # 之后每遇到一次同步就打一条警告
+# 或 &quot;error&quot;：直接报错，逼你改掉
+</code></pre>
+<p><strong>改法</strong>：</p>
+<ul>
+<li>指标在 GPU 上累加：<code>running_loss += loss.detach()</code>，每 100 步才 <code>.item()</code> 一次；</li>
+<li><code>if</code> 改 <code>torch.where</code>（第 12 章）；</li>
+<li>数据相关形状改成固定形状 + mask。</li>
+</ul>
+<p><strong>一句话</strong>：同步点常藏在日志、指标、数据相关形状里；<code>set_sync_debug_mode("warn")</code> 帮你全找出来；指标在 GPU 上累计、隔 N 步再取。</p>
+<h3 id="gpu2026-11-14">第四步：预取到 GPU——让下一批提前到位（2026-11-14）</h3>
+<p>即便 DataLoader 够快，第 ④ 段拷贝仍可能和计算串在一起。办法：<strong>在算这一批的同时，把下一批拷进显存</strong>。</p>
+<pre><code class="language-python">class CUDAPrefetcher:
+    def __init__(self, loader):
+        self.it, self.stream = iter(loader), torch.cuda.Stream()
+        self.preload()
+    def preload(self):
+        try: x, y = next(self.it)
+        except StopIteration: self.next = None; return
+        with torch.cuda.stream(self.stream):                       # 另一条轨道上拷
+            self.next = (x.cuda(non_blocking=True), y.cuda(non_blocking=True))
+    def __iter__(self): return self
+    def __next__(self):
+        if self.next is None: raise StopIteration
+        torch.cuda.current_stream().wait_stream(self.stream)       # 用之前等拷贝完成
+        batch = self.next
+        for t in batch: t.record_stream(torch.cuda.current_stream())  # 告诉分配器：这块显存在主轨道上还在用
+        self.preload()                                             # 马上开始拷下一批
+        return batch
+</code></pre>
+<p><code>record_stream</code> 那一行是为了第 5 章的缓存分配器：张量是在拷贝轨道上分配的，如果不告诉分配器它还在主轨道上用，分配器可能提前把这块显存借给别人。</p>
+<p><strong>一句话</strong>：用第二条 stream 提前拷下一批，用之前 wait_stream，再 record_stream 防止显存被提前回收。</p>
+<h3 id="_2">动画演示：一项项去掉等待</h3>
+<p><img alt="数据管道优化" src="../animations/25-input-pipeline.gif" /></p>
+<p>可交互版：<a href="../animations/25-input-pipeline.html">animations/25-input-pipeline.html</a>。四个开关可以单独开关：<strong>预分词、num_workers=4、pin_memory + non_blocking、去掉每步 .item()</strong>。</p>
+<p><strong>怎么看</strong>：</p>
+<ol>
+<li>时间线上每步拆成：读取处理（灰）、拷贝（紫）、计算（蓝）、同步等待（红）；</li>
+<li>播放时依次打开四个开关，每打开一个，对应颜色的块变短或和计算重叠；</li>
+<li>右边是每步用时和 GPU 忙碌占比（数字是编的，只看趋势）。</li>
+</ol>
+<h2 id="_3">练习与作答记录</h2>
+<p><strong>题 1</strong>：测得等数据 5 ms、计算 45 ms。值得花时间优化数据管道吗？为什么？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 2</strong>：下面这行为什么会让每一步都同步？怎么改成每 100 步才同步一次？</p>
+<pre><code class="language-python">total_correct += (logits.argmax(-1) == y).sum().item()
+</code></pre>
+<p><strong>作答</strong>：（待作答）</p>
+<p><strong>题 3</strong>：语言模型预训练，为什么推荐"提前把语料分词存成 token 数组"？它省掉了四段路中的哪几段？</p>
+<p><strong>作答</strong>：（待作答）</p>
+<h2 id="_4">口诀</h2>
+<blockquote>
+<p>先拆两段计时，数据不慢别瞎改；<br />
+读取、处理、拼盘、拷贝四段路，能离线就离线，能并行就并行，拷贝用 pin 加 non_blocking；<br />
+同步点藏在日志和指标里，sync_debug_mode 帮你找；第二条 stream 提前拷下一批。</p>
+</blockquote>
+<h2 id="_5">本章复习卡片</h2>
+<ul>
+<li>P87（拆"等数据 / 计算"计时；测量用的 synchronize 测完要删）</li>
+<li>P88（四段路与对应手段；LLM 预分词 + memmap）</li>
+<li>P89（隐藏同步点清单；<code>torch.cuda.set_sync_debug_mode("warn")</code>；GPU 上累计指标）</li>
+<li>P90（CUDA 预取：另一条 stream + wait_stream + record_stream）</li>
+</ul>
+<h2 id="_6">附录 · 延伸阅读</h2>
+<h3 id="_7">推荐阅读</h3>
+<table>
+<thead>
+<tr>
+<th>读什么</th>
+<th>读哪里</th>
+<th>读它为了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>★ AISPE 第 13 章</td>
+<td><code>ch13.md</code> 第 1021–1097 行（计算流 + 传输流预取）、第 1552–1561 行（数据输入流水线）</td>
+<td>本章第二、四步</td>
+</tr>
+<tr>
+<td>★ 官方文档 CUDA semantics</td>
+<td>"Use pinned memory buffers"、<code>set_sync_debug_mode</code>（〔在线〕）</td>
+<td>pinned memory 与同步检测</td>
+</tr>
+<tr>
+<td>CS336 a1 handout</td>
+<td>数据加载与 <code>np.memmap</code> 的说明</td>
+<td>预分词 + memmap 的作业版</td>
+</tr>
+<tr>
+<td>NVIDIA DALI / WebDataset 文档</td>
+<td>概览（〔在线〕）</td>
+<td>GPU 解码、大分片格式</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">数学原理</h3>
+<ul>
+<li><strong>GPU 忙碌占比</strong> = 计算时间 ÷（计算 + 不能重叠的等待）。数据与计算完全重叠时，每步时间 = max(数据, 计算)；串行时 = 数据 + 计算。</li>
+</ul>
+<h3 id="_9">公式清单</h3>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>意思</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pin_memory=True</code> + <code>.to(dev, non_blocking=True)</code></td>
+<td>异步拷贝</td>
+</tr>
+<tr>
+<td><code>torch.cuda.set_sync_debug_mode("warn" / "error")</code></td>
+<td>揪出同步点</td>
+</tr>
+<tr>
+<td><code>running += loss.detach()</code>，隔 N 步 <code>.item()</code></td>
+<td>GPU 上累计指标</td>
+</tr>
+<tr>
+<td><code>wait_stream</code> + <code>record_stream</code></td>
+<td>跨 stream 使用张量</td>
+</tr>
+<tr>
+<td><code>np.memmap(path, dtype=np.uint16, mode="r")</code></td>
+<td>按需读 token 文件</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_10">代码对照：把本章的数字用代码算一遍</h3>
+<blockquote>
+<p>用 torch 把讲义里的数字跑一遍。代码在仓库本地 <code>pytorch-deep-dive/solutions/chapter-code/ch25_input_sync.py</code>，配套测试 <code>tests/test_ch23_28.py</code>；同一章的 notebook：<code>notebooks/ch25_input_sync.ipynb</code>（讲解和代码放在一起，一格一格边读边跑）。Mac 上直接能跑，不需要 GPU：</p>
+<p><code>bash  
+cd pytorch-deep-dive/solutions/chapter-code  
+uv run python ch25_input_sync.py   # 一步一步打印  
+uv run pytest tests/test_ch23_28.py</code></p>
+</blockquote>
+<p><strong>讲义 ↔ 代码</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>讲义</th>
+<th>公式 / 说法</th>
+<th>写法</th>
+<th>跑出来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步 等数据占比</td>
+<td>18 ÷ 48</td>
+<td><code>data_wait_share(18, 30)</code></td>
+<td>37.5%</td>
+</tr>
+<tr>
+<td>第三步 GPU 上累计</td>
+<td>最后只取一次</td>
+<td><code>accumulate_on_device(...)</code></td>
+<td>2.5</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键几行</strong>：</p>
+<pre><code class="language-python">running += loss.detach()                  # 不 .item()，不同步
+(running / n).item()                      # 最后同步一次
+</code></pre>
+<p><strong>代码里才看得到的 1 件事</strong>：</p>
+<ol>
+<li><strong><code>detach()</code> 别忘了</strong>：不然累加会把每一步的账本都连起来，越占越多。</li>
+</ol>
+<p><strong>自己改一改</strong>（不影响练习答案）：</p>
+<ul>
+<li>在有 CUDA 的机器上加 <code>torch.cuda.set_sync_debug_mode("warn")</code>，在循环里调 <code>.item()</code> 看警告。</li>
+</ul><nav class="pager"><a href="24-profiler.html">← 第 24 章 · profiler：给训练拍一段&quot;录像&quot;</a><a href="26-mixed-precision.html">第 26 章 · 混合精度：bf16、fp16、TF32、FP8 怎么选 →</a></nav>
+</main>
+<footer>来自个人学习仓库的对话讲义，含练习作答记录。源码：<a href="https://github.com/wikieden/pytorch-inside-out">github.com/wikieden/pytorch-inside-out</a></footer>
+</body></html>
