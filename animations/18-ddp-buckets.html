@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DDP 分桶重叠</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 18 章 · DDP：梯度好一桶发一桶</h1>
+<p class="sub">配套讲义：<a href="../lessons/18-ddp.html">第 18 章 · DDP：每卡一份模型，反向时边算边对答案</a>。反向总共 40 ms，通信总共 32 ms（时间是编的）。桶越多每桶越小，但每次通信有 1 ms 启动开销。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><button id="tm"></button><label>桶数</label><input type="range" id="nb" min="1" max="8" value="4"><span id="nbv">4</span></div>
+<p class="note">看点：① 反向从最后一层往前算，桶 1 装的是最后几层；② 算完再发：通信整块排在后面；③ 分桶重叠：桶一凑齐就发，和前面几层的反向并排，只有最后一个桶露在外面。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let NB=4,overlap=true,t=0,auto=true;
+const BW=40,CM=32,LAT=1;
+function sched(ov){
+  const seg=BW/NB,comm=CM/NB+LAT;const comp=[],cm=[];let c=0;
+  for(let b=0;b<NB;b++){comp.push([b*seg,(b+1)*seg]);}
+  for(let b=0;b<NB;b++){const st=ov?Math.max(c,(b+1)*seg):Math.max(c,BW);cm.push([st,st+comm]);c=st+comm}
+  return {comp,cm,end:Math.max(BW,c)};
+}
+function draw(){
+  clear(sv);
+  const S=sched(overlap),T=Math.max(sched(false).end,sched(true).end)+4;
+  const X=v=>90+v/T*560;
+  txt(overlap?'分桶重叠：桶一凑齐就 all_reduce':'算完再发：反向全部结束才开始通信',{x:340,y:26,'text-anchor':'middle',class:'cap'},sv);
+  txt('反向计算',{x:14,y:105,class:'m'},sv);txt('all_reduce',{x:14,y:185,class:'m'},sv);
+  S.comp.forEach((c,b)=>{if(c[0]>=t)return;const e=Math.min(c[1],t);
+    el('rect',{x:X(c[0]),y:85,width:X(e)-X(c[0])-1,height:32,rx:3,fill:'var(--accent)',opacity:.85},sv);
+    if(e===c[1])txt(`层 ${NB-b}…`,{x:(X(c[0])+X(c[1]))/2,y:106,'text-anchor':'middle',class:'m'},sv).style.fill='#fff';
+  });
+  S.cm.forEach((c,b)=>{if(c[0]>=t)return;const e=Math.min(c[1],t);
+    el('rect',{x:X(c[0]),y:165,width:Math.max(X(e)-X(c[0])-1,1),height:32,rx:3,fill:'var(--warm)',opacity:.85},sv);
+    if(e===c[1]&&X(c[1])-X(c[0])>34)txt(`桶 ${b+1}`,{x:(X(c[0])+X(c[1]))/2,y:186,'text-anchor':'middle',class:'m'},sv).style.fill='#fff';
+  });
+  el('line',{x1:X(t),y1:70,x2:X(t),y2:210,stroke:'var(--muted)','stroke-dasharray':'3 3'},sv);
+  txt(`t = ${t.toFixed(0)} ms`,{x:X(t)+4,y:66,class:'m'},sv);
+  el('line',{x1:X(BW),y1:80,x2:X(BW),y2:205,stroke:'var(--line)'},sv);
+  txt('反向结束',{x:X(BW)-24,y:225,class:'m'},sv);
+  if(t>=S.end){
+    const o=sched(!overlap);
+    txt(`${NB} 个桶，${overlap?'重叠':'不重叠'}：总用时 ${S.end.toFixed(0)} ms，通信露在反向之后 ${(S.end-BW).toFixed(0)} ms`,{x:90,y:280,class:'big'},sv);
+    txt(`（${overlap?'不重叠':'重叠'}时：${o.end.toFixed(0)} ms）`,{x:90,y:306,class:'m'},sv);
+    txt('桶太多：每次通信的启动开销累加；桶太少：第一个桶要等很久才发',{x:90,y:340,class:'m'},sv);
+  }
+  $('tm').textContent='方式：'+(overlap?'分桶重叠':'算完再发');$('nbv').textContent=NB;
+}
+function reset(){t=0;if(auto)overlap=false;draw()}
+function next(){const S=sched(overlap);if(t<S.end){t=Math.min(S.end,t+4);draw();return true}if(auto&&!overlap){overlap=true;t=0;draw();return true}return false}
+$('tm').onclick=()=>{ANIM.stop();auto=false;overlap=!overlap;t=sched(overlap).end;draw()};
+$('nb').oninput=e=>{ANIM.stop();auto=false;NB=+e.target.value;t=sched(overlap).end;draw()};
+setupPlayer({captureSeed:1,reset,next},250);
+</script></body></html>

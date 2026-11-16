@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>自定义算子注册</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:12px}</style></head>
+<body><main>
+<h1>第 33 章 · 注册前后的待遇</h1>
+<p class="sub">配套讲义：<a href="../lessons/33-custom-op.html">第 33 章 · 注册自定义算子：让你的 kernel 成为 PyTorch 的&quot;一等公民&quot;</a>。中间是你的 kernel（mylib::add_relu），四周是 PyTorch 的四个系统。下方输出是本机实测。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl" id="sw"></div>
+<p class="note">看点：① 什么都没注册时四条线都断开；② custom_op 接上分派器；③ register_fake 接上 torch.compile（graphs 1、breaks 0）；④ register_autograd 接上 Autograd（梯度 [0, 0, 1]）；⑤ opcheck 四项 SUCCESS。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const STEPS=[['custom_op','op'],['register_fake','fake'],['register_autograd','ag'],['opcheck','chk']];
+const on={op:false,fake:false,ag:false,chk:false};let k=0,auto=true;
+const sw=$('sw');
+STEPS.forEach(([n,key])=>{const b=document.createElement('button');b.textContent=n;b.dataset.key=key;b.onclick=()=>{ANIM.stop();auto=false;on[key]=!on[key];draw()};sw.appendChild(b)});
+const SYS=[
+  {n:'分派器',x:340,y:70,need:['op'],ok:'torch.ops.mylib.add_relu(…) → tensor([2., 2.])'},
+  {n:'torch.compile',x:120,y:180,need:['op','fake'],ok:'explain：graphs 1, breaks 0',bad:'没 fake：RuntimeError when making fake tensor call'},
+  {n:'Autograd',x:560,y:180,need:['op','ag'],ok:'x.grad = [0, 0, 1]，y.grad = [0, 0, 1]',bad:'没有反向：梯度断了'},
+  {n:'opcheck',x:340,y:290,need:['op','fake','ag','chk'],ok:'schema / autograd / faketensor / aot_dispatch 全部 SUCCESS'}];
+function draw(){
+  clear(sv);[...sw.children].forEach(b=>b.classList.toggle('on',on[b.dataset.key]));
+  const cx=340,cy=180;
+  txt('已注册：'+(STEPS.filter(s=>on[s[1]]).map(s=>s[0]).join(' + ')||'无（裸 Python 函数）'),{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  SYS.forEach(s=>{
+    const okk=s.need.every(n=>on[n]);
+    el('line',{x1:cx,y1:cy,x2:s.x,y2:s.y,stroke:okk?'var(--good)':'var(--bad)','stroke-width':2.5,'stroke-dasharray':okk?'':'6 5'},sv);
+    el('rect',{x:s.x-70,y:s.y-18,width:140,height:36,rx:8,fill:okk?'var(--accent-bg)':'var(--bg)',stroke:okk?'var(--good)':'var(--line)'},sv);
+    txt(s.n,{x:s.x,y:s.y+5,'text-anchor':'middle',class:'big'},sv);
+  });
+  el('rect',{x:cx-80,y:cy-22,width:160,height:44,rx:10,fill:'var(--amber)'},sv);
+  txt('mylib::add_relu',{x:cx,y:cy+5,'text-anchor':'middle',class:'big'},sv).style.fill='#fff';
+  let y=340;
+  SYS.forEach(s=>{const okk=s.need.every(n=>on[n]);if(okk){txt(`✓ ${s.n}：${s.ok}`,{x:30,y,class:'code'},sv).style.fill='var(--good)';y+=18}else if(s.bad&&on.op){txt(`✗ ${s.n}：${s.bad}`,{x:30,y,class:'code'},sv).style.fill='var(--bad)';y+=18}});
+}
+function reset(){k=0;if(auto)Object.keys(on).forEach(x=>on[x]=false);draw()}
+function next(){if(k>=STEPS.length)return false;on[STEPS[k][1]]=true;k++;draw();return true}
+setupPlayer({captureSeed:1,reset,next},1400);
+</script></body></html>

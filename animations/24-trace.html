@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>profiler 时间线</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 24 章 · 读一段时间线</h1>
+<p class="sub">配套讲义：<a href="../lessons/24-profiler.html">第 24 章 · profiler：给训练拍一段&quot;录像&quot;</a>。一步训练按本机实测比例画：默认 AdamW 每步 2.61 ms（优化器 1.25 ms），fused 每步 1.82 ms（优化器 0.51 ms）。小块的排布是示意。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><button id="tf"></button></div>
+<p class="note">看点：① 前向、反向主要是 mm / addmm（绿）；② 默认 AdamW 的优化器段是一长串细碎小块；③ fused 后变成一整块，整步变短；④ 下方表格对应讲义第二、三步的数字。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let fused=false,k=0,auto=true;
+function blocks(){
+  const fw=0.45,bw=fused?0.86:0.91,opt=fused?0.51:1.25;const B=[];let t=0;
+  [[fw,'前向',4],[bw,'反向',6]].forEach(([d,n,c])=>{const s=d/c;for(let i=0;i<c;i++){B.push({t0:t+i*s,t1:t+(i+0.8)*s,c:i%2?'var(--accent)':'var(--good)',seg:n})}t+=d});
+  const n=fused?1:36;const s=opt/n;for(let i=0;i<n;i++)B.push({t0:t+i*s,t1:t+(i+(fused?1:0.7))*s,c:'var(--warm)',seg:'优化器'});t+=opt;
+  return {B,end:t,opt,fb:fw+bw};
+}
+function draw(){
+  clear(sv);
+  const S=blocks(),T=2.7,X=v=>60+v/T*600;
+  txt(fused?'AdamW(fused=True)：优化器一整块':'AdamW 默认实现：优化器是一串碎块',{x:340,y:26,'text-anchor':'middle',class:'cap'},sv);
+  txt('CPU',{x:16,y:100,class:'big'},sv);
+  el('rect',{x:X(0),y:80,width:X(T)-X(0),height:34,fill:'var(--card)'},sv);
+  const shown=S.B.filter((b,i)=>i<k*6);
+  shown.forEach(b=>el('rect',{x:X(b.t0),y:80,width:Math.max(X(b.t1)-X(b.t0),1),height:34,fill:b.c,opacity:.9},sv));
+  // segment labels
+  if(k>0){[['前向',0,0.45],['反向',0.45,S.fb],['optimizer.step',S.fb,S.end]].forEach(([n,a,b])=>{el('line',{x1:X(a),y1:124,x2:X(b)-2,y2:124,stroke:'var(--muted)'},sv);txt(n,{x:(X(a)+X(b))/2,y:140,'text-anchor':'middle',class:'m'},sv)})}
+  for(let ms=0;ms<=2.5;ms+=0.5){txt(ms+' ms',{x:X(ms),y:70,'text-anchor':'middle',class:'m'},sv);el('line',{x1:X(ms),y1:74,x2:X(ms),y2:78,stroke:'var(--muted)'},sv)}
+  if(shown.length===S.B.length){
+    el('line',{x1:X(S.end),y1:76,x2:X(S.end),y2:118,stroke:'var(--bad)','stroke-width':2},sv);
+    txt(`每步 ${S.end.toFixed(2)} ms`,{x:X(S.end)+4,y:160,class:'big'},sv).style.fill='var(--bad)';
+    const rows=[['','每步','优化器','占比'],['默认','2.61 ms','1.25 ms','47.9%'],['fused','1.82 ms','0.51 ms','27.9%']];
+    rows.forEach((r,i)=>r.forEach((c,j)=>{const t=txt(c,{x:80+j*140,y:220+i*30,class:i===0?'m':'big'},sv);if(i>0&&((i===1)!==fused))t.style.fill='var(--warm)'}));
+    txt(fused?'下一步：最大的块变成 matmul 了 → 第 26 章看精度和形状':'诊断：Optimizer.step Total 47.7%，Self 只有 6%：下面全是碎活',{x:80,y:340,class:'m'},sv);
+  }
+  $('tf').textContent='优化器：'+(fused?'fused':'默认');
+}
+function reset(){k=0;if(auto)fused=false;draw()}
+function next(){const n=Math.ceil(blocks().B.length/6);if(k<n){k++;draw();return true}if(auto&&!fused){fused=true;k=0;draw();return true}return false}
+$('tf').onclick=()=>{ANIM.stop();auto=false;fused=!fused;k=99;draw()};
+setupPlayer({captureSeed:1,reset,next},400);
+</script></body></html>

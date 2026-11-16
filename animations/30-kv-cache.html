@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KV cache</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 30 章 · 有 KV cache 与没 cache</h1>
+<p class="sub">配套讲义：<a href="../lessons/30-inference-mode.html">第 30 章 · 推理模式与 KV cache：生成一个 token 要做什么</a>。生成 10 个 token；每一行是一步，格子是这一步要用到 K、V 的 token。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><button id="tc"></button></div>
+<p class="note">看点：① 不带 cache：第 t 步把前 t 个 token 的 K、V 全部重算（橙），累计是三角形；② 带 cache：只算新 token（橙），旧的从 cache 读（灰）；③ 右边是累计计算量与 cache 占用（按 Llama-2-7B 每 token 0.5 MB 算）。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let cache=false,k=0,auto=true;const T=10;
+function draw(){
+  clear(sv);
+  txt(cache?'带 KV cache：每步只算新 token':'不带 cache：每步把整段重算',{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  const cs=30,X0=60,Y0=50;
+  let work=0;
+  for(let t=0;t<k;t++){
+    txt(`第 ${t+1} 步`,{x:X0-8,y:Y0+t*cs+20,'text-anchor':'end',class:'m'},sv);
+    for(let j=0;j<=t;j++){
+      const compute=!cache||j===t;
+      if(compute)work++;
+      el('rect',{x:X0+j*cs,y:Y0+t*cs,width:cs-3,height:cs-3,rx:3,fill:compute?'var(--warm)':'var(--card)',stroke:'var(--line)'},sv);
+      if(j===t)txt('新',{x:X0+j*cs+cs/2-1,y:Y0+t*cs+19,'text-anchor':'middle',class:'m'},sv).style.fill='#fff';
+    }
+  }
+  const tx=420;
+  txt(`已生成 ${k} 个 token`,{x:tx,y:80,class:'big'},sv);
+  txt(`累计算 K、V 的次数：${work}`,{x:tx,y:110,class:'big'},sv).style.fill='var(--warm)';
+  txt(cache?`= T = ${k}`:`= T(T+1)/2 = ${k*(k+1)/2}`,{x:tx,y:134,class:'m'},sv);
+  txt(`cache 占用：${cache?(k*0.5).toFixed(1)+' MB':'0（不存）'}`,{x:tx,y:170,class:'big'},sv).style.fill='var(--purple)';
+  txt('（Llama-2-7B：每 token 0.5 MB）',{x:tx,y:192,class:'m'},sv);
+  if(k>=T){
+    txt('T = 4096 时：',{x:tx,y:240,class:'big'},sv);
+    txt('不带 cache 约 840 万次 token 计算',{x:tx,y:264,class:'m'},sv);
+    txt('带 cache 4096 次，cache 占 2 GiB',{x:tx,y:286,class:'m'},sv);
+  }
+  $('tc').textContent='KV cache：'+(cache?'开':'关');
+}
+function reset(){k=0;if(auto)cache=false;draw()}
+function next(){if(k<T){k++;draw();return true}if(auto&&!cache){cache=true;k=0;draw();return true}return false}
+$('tc').onclick=()=>{ANIM.stop();auto=false;cache=!cache;k=T;draw()};
+setupPlayer({captureSeed:1,reset,next},500);
+</script></body></html>

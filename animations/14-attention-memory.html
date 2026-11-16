@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>attention 分数表</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 14 章 · 手写 attention 与 Flash 后端的显存</h1>
+<p class="sub">配套讲义：<a href="../lessons/14-functional-attention.html">第 14 章 · nn.functional：归一化、激活与注意力</a>。左：手写版先写出整张 T × T 分数表；右：Flash 后端按块算，分数只在片上存一小块。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><label>序列长度 T</label><input type="range" id="tt" min="10" max="15" value="14"><span id="ttv"></span></div>
+<p class="note">看点：① 手写版的 8 × 8 格子全部要落到显存；② Flash 版每次只在片上处理一块（亮的那块），算完把结果累加进输出就丢掉；③ 下方：T 翻倍，手写版的表变 4 倍，Flash 版只多一倍的输入输出。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let k=0,LT=14;const NB=8;
+function fmt(b){return b>=1e9?(b/1e9).toFixed(1)+' GB':(b/1e6).toFixed(0)+' MB'}
+function draw(){
+  clear(sv);
+  const T=2**LT,H=32,BY=2;
+  txt(k<=NB?'手写：一行行算出完整的分数表，写进显存':'Flash：按块算，片上只存当前一块',{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  const cs=22,L0=60,R0=380,Y0=60;
+  txt('手写：分数表在显存',{x:L0,y:Y0-8,class:'m'},sv);txt('Flash：分数块在片上（SRAM）',{x:R0,y:Y0-8,class:'m'},sv);
+  for(let i=0;i<NB;i++)for(let j=0;j<NB;j++){
+    const fillL=i<Math.min(k,NB);
+    el('rect',{x:L0+j*cs,y:Y0+i*cs,width:cs-2,height:cs-2,fill:fillL?(j<=i?'var(--accent)':'var(--bad)'):'var(--card)',opacity:fillL?(j<=i?.8:.35):1},sv);
+    const kk=k-NB-1,cur=kk>=0&&Math.floor(kk/NB)===i&&kk%NB===j&&j<=i;
+    const done=kk>=0&&(i<Math.floor(kk/NB)||(i===Math.floor(kk/NB)&&j<kk%NB));
+    el('rect',{x:R0+j*cs,y:Y0+i*cs,width:cs-2,height:cs-2,fill:cur?'var(--warm)':done&&j<=i?'var(--card)':'var(--bg)',stroke:j<=i?'var(--line)':'var(--card)'},sv);
+  }
+  txt('红：因果 mask 遮掉（手写版照样算出来再填 −∞）',{x:L0,y:Y0+NB*cs+18,class:'m'},sv).style.fill='var(--bad)';
+  txt('橙：当前块；遮掉的块直接跳过',{x:R0,y:Y0+NB*cs+18,class:'m'},sv).style.fill='var(--warm)';
+  const naive=BY*H*T*T,flash=BY*H*T*128*2;
+  txt(`T = ${T}，32 个头，bf16`,{x:60,y:290,class:'big'},sv);
+  txt(`手写版分数表：32 × ${T} × ${T} × 2 字节 = ${fmt(naive)}`,{x:60,y:318,class:'m'},sv).style.fill='var(--bad)';
+  txt(`Flash：不存分数表；只存输入输出和每行的 logsumexp（约 ${fmt(flash)} 量级）`,{x:60,y:342,class:'m'},sv).style.fill='var(--teal)';
+  txt('T 翻倍：手写版 × 4，Flash × 2',{x:60,y:370,class:'big'},sv);
+  $('ttv').textContent=T;
+}
+function total(){return NB+1+NB*NB}
+function reset(){k=0;draw()}
+function next(){if(k>=total())return false;k++;let kk=k-NB-1;while(kk>=0&&k<total()&&kk%NB>Math.floor(kk/NB)){k++;kk=k-NB-1}draw();return true}
+$('tt').oninput=e=>{LT=+e.target.value;draw()};
+setupPlayer({captureSeed:1,reset,next},220);
+</script></body></html>

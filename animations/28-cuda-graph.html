@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CUDA Graph</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 28 章 · 逐个 launch、融合、一次重放</h1>
+<p class="sub">配套讲义：<a href="../lessons/28-compile-graphs.html">第 28 章 · 训练里用 compile 与 CUDA Graphs：消灭碎活和启动开销</a>。40 个小算子；CPU 每次下单 4 µs，每个算子 GPU 计算 t µs（时间是编的，只看形状）。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><button id="tm"></button><label>每个算子计算 t（µs）</label><input type="range" id="tk" min="1" max="12" value="1"><span id="tkv">1</span></div>
+<p class="note">看点：① eager：每个 kernel 前都要等 CPU 下单，GPU 上全是空隙；② compile：融成 8 个 kernel，但每个仍要单独下单；③ CUDA Graph：CPU 只下一次单，GPU 首尾相接；④ 把 t 调大（大 batch），三种方式差距变小。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const MODES=['eager','compile（融合）','compile + CUDA Graph'];
+let mi=0,TK=1,auto=true,shown=0;
+const NOP=40,LT=4;
+function sched(m){
+  const cpu=[],gpu=[];let c=0,g=0;
+  if(m===0){for(let i=0;i<NOP;i++){cpu.push([c,c+LT]);c+=LT;const s=Math.max(g,c);gpu.push([s,s+TK]);g=s+TK}}
+  else if(m===1){const nk=8,dur=NOP*TK/nk*0.6;for(let i=0;i<nk;i++){cpu.push([c,c+LT]);c+=LT;const s=Math.max(g,c);gpu.push([s,s+dur]);g=s+dur}}
+  else{cpu.push([0,LT]);let s=LT;const nk=8,dur=NOP*TK/nk*0.6;for(let i=0;i<nk;i++){gpu.push([s,s+dur]);s+=dur}g=s}
+  return {cpu,gpu,end:Math.max(c,g)};
+}
+function draw(){
+  clear(sv);
+  const S=sched(mi),T=Math.max(sched(0).end,1);
+  const X=v=>80+v/T*570;
+  txt(MODES[mi],{x:340,y:26,'text-anchor':'middle',class:'cap'},sv);
+  txt('CPU',{x:20,y:92,class:'big'},sv);txt('GPU',{x:20,y:172,class:'big'},sv);
+  el('rect',{x:80,y:70,width:570,height:34,fill:'var(--card)'},sv);el('rect',{x:80,y:150,width:570,height:34,fill:'var(--card)'},sv);
+  const n=Math.ceil(shown);
+  S.cpu.slice(0,Math.max(n,1)).forEach(b=>el('rect',{x:X(b[0]),y:70,width:Math.max(X(b[1])-X(b[0])-0.5,1),height:34,fill:'var(--muted)',opacity:.6},sv));
+  S.gpu.slice(0,n).forEach(b=>el('rect',{x:X(b[0]),y:150,width:Math.max(X(b[1])-X(b[0])-0.5,1),height:34,fill:'var(--accent)'},sv));
+  if(n>=S.gpu.length){
+    const busy=S.gpu.reduce((a,b)=>a+b[1]-b[0],0);
+    txt(`下单 ${S.cpu.length} 次，kernel ${S.gpu.length} 个，总用时 ${S.end.toFixed(0)} µs，GPU 忙碌 ${(busy/S.end*100).toFixed(0)}%`,{x:80,y:240,class:'big'},sv);
+    const rows=MODES.map((m,i)=>{const s=sched(i);return `${m}：${s.end.toFixed(0)} µs`});
+    rows.forEach((r,i)=>txt(r,{x:80,y:280+i*24,class:'m'},sv).style.fill=i===mi?'var(--warm)':'var(--muted)');
+  }
+  $('tm').textContent='模式：'+MODES[mi];$('tkv').textContent=TK;
+}
+function reset(){shown=0;if(auto)mi=0;draw()}
+function next(){const S=sched(mi);if(shown<S.gpu.length){shown+=mi===0?4:1;draw();return true}if(auto&&mi<2){mi++;shown=0;draw();return true}return false}
+$('tm').onclick=()=>{ANIM.stop();auto=false;mi=(mi+1)%3;shown=99;draw()};
+$('tk').oninput=e=>{ANIM.stop();auto=false;TK=+e.target.value;shown=99;draw()};
+setupPlayer({captureSeed:1,reset,next},350);
+</script></body></html>

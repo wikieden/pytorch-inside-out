@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>分布式 hang</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:12px}</style></head>
+<body><main>
+<h1>第 22 章 · 条件分支导致的卡死</h1>
+<p class="sub">配套讲义：<a href="../lessons/22-dcp-debug.html">第 22 章 · 分布式存档与排错：每卡存一片，卡死先查顺序</a>。每步：反向里一次 all_reduce（梯度），然后 <code>if loss &gt; 阈值: all_reduce(stats)</code>。rank 0 的 loss 在第 2 步超过阈值，rank 1 没有。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><button id="tf"></button></div>
+<p class="note">看点：① 每个方块是一次集合通信，括号里是"第几次调用"和它本来要配对的内容；② 分支依赖本 rank 的 loss：rank 0 多调一次，从此两边的调用错开，NCCL 只认"第几次"，两人都在等永远不会来的对方；③ 改成先把条件 all_reduce 统一，调用次数一致。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let fixed=false,k=0;
+function calls(rank){
+  const c=[];
+  for(let s=1;s<=3;s++){
+    if(fixed)c.push(`flag${s}`);
+    c.push(`grad${s}`);
+    const over=fixed?(s===2):(rank===0&&s===2);
+    if(over)c.push(`stats${s}`);
+  }
+  return c;
+}
+function draw(){
+  clear(sv);
+  const A=calls(0),B=calls(1);
+  txt(fixed?'先 all_reduce 统一条件（flag），两边判断一致':'条件依赖本 rank 的 loss：rank 0 多调了一次',{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  const W=74,X=i=>100+i*W;
+  let hang=-1;
+  for(let i=0;i<Math.max(A.length,B.length);i++){if(A[i]!==B[i]){hang=i;break}}
+  [[A,'rank 0',90],[B,'rank 1',200]].forEach(([C,name,y])=>{
+    txt(name,{x:20,y:y+26,class:'big'},sv);
+    C.forEach((c,i)=>{
+      if(i>=k)return;
+      const bad=hang>=0&&i>=hang;
+      const wait=bad&&i===hang;
+      el('rect',{x:X(i),y,width:W-6,height:40,rx:6,fill:wait?'var(--bad)':bad?'var(--card)':c.startsWith('stats')?'var(--purple)':c.startsWith('flag')?'var(--teal)':'var(--accent)',opacity:bad&&!wait?.5:.85},sv);
+      txt(`#${i+1}`,{x:X(i)+6,y:y+16,class:'m'},sv).style.fill='#fff';
+      txt(c,{x:X(i)+6,y:y+33,class:'code'},sv).style.fill='#fff';
+    });
+  });
+  if(hang>=0&&k>hang){
+    el('line',{x1:X(hang)+34,y1:130,x2:X(hang)+34,y2:200,stroke:'var(--bad)','stroke-width':2,'stroke-dasharray':'4 3'},sv);
+    txt(`第 ${hang+1} 次调用：rank 0 在发 ${A[hang]}，rank 1 在发 ${B[hang]}`,{x:100,y:280,class:'big'},sv).style.fill='var(--bad)';
+    txt('NCCL 只按"第几次调用"配对：数据配错，后面 rank 0 多出的一次永远等不到人 → hang',{x:100,y:306,class:'m'},sv);
+    txt('排查：timeout 让它报错 → TORCH_DISTRIBUTED_DEBUG=DETAIL 指出哪次对不上 → py-spy 看停在哪行',{x:100,y:332,class:'m'},sv);
+  }else if(k>=Math.max(A.length,B.length)){
+    txt('两边调用次数和顺序一致，顺利跑完 ✓',{x:100,y:290,class:'big'},sv).style.fill='var(--good)';
+    txt('改法：flag = (loss > 阈值).float()；all_reduce(flag, MAX)；if flag: …',{x:100,y:318,class:'code'},sv);
+  }
+  $('tf').textContent='写法：'+(fixed?'先统一条件':'条件依赖本 rank');
+}
+function reset(){k=0;draw()}
+function next(){const n=Math.max(calls(0).length,calls(1).length);if(k<n){k++;draw();return true}if(!fixed){fixed=true;k=0;draw();return true}return false}
+$('tf').onclick=()=>{ANIM.stop();fixed=!fixed;k=99;draw()};
+setupPlayer({captureSeed:1,reset,next},900);
+</script></body></html>

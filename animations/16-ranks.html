@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>进程编号</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:15px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}</style></head>
+<body><main>
+<h1>第 16 章 · 每卡一个进程：rank 与 local_rank</h1>
+<p class="sub">配套讲义：<a href="../lessons/16-process-model.html">第 16 章 · 进程模型：一张卡一个进程，靠编号分工</a>。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><label>机器数</label><input type="range" id="nn" min="1" max="3" value="2"><span id="nnv">2</span><label>每台卡数</label><input type="range" id="np" min="1" max="4" value="4"><span id="npv">4</span></div>
+<p class="note">看点：① torchrun 在每台机器上依次起进程，rank = 机器号 × 每台卡数 + local_rank；② 所有进程连到主节点（rank 0 所在机器）会合；③ DistributedSampler 隔着分下标：rank r 拿 r、r + W、r + 2W……</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let NN=2,NP=4,k=0;
+function draw(){
+  clear(sv);
+  const W=NN*NP,total=W;
+  const caps=k<=W?`torchrun 起进程：已起 ${k} / ${W} 个`:k===W+1?'init_process_group：所有进程连到主节点会合':'DistributedSampler：rank r 拿下标 r, r+W, r+2W…';
+  txt(caps,{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  const mw=600/NN;
+  for(let n=0;n<NN;n++){
+    const mx=40+n*mw;
+    el('rect',{x:mx,y:50,width:mw-20,height:200,rx:10,fill:'var(--card)',stroke:'var(--line)'},sv);
+    txt(`机器 ${n}（node_rank = ${n}）`,{x:mx+10,y:70,class:'m'},sv);
+    const gw=Math.min(70,(mw-40)/NP);
+    for(let p=0;p<NP;p++){
+      const rank=n*NP+p,on=rank<k,gx=mx+10+p*(gw+4),gy=90;
+      el('rect',{x:gx,y:gy,width:gw,height:70,rx:8,fill:on?'var(--accent-bg)':'var(--bg)',stroke:on?'var(--accent)':'var(--line)','stroke-dasharray':on?'':'4 3'},sv);
+      if(on){
+        txt(`rank ${rank}`,{x:gx+gw/2,y:gy+28,'text-anchor':'middle',class:'big'},sv);
+        const t=txt(`local ${p}`,{x:gx+gw/2,y:gy+50,'text-anchor':'middle',class:'m'},sv);t.style.fill='var(--purple)';
+        if(k>W){el('line',{x1:gx+gw/2,y1:gy+70,x2:60,y2:290,stroke:'var(--teal)','stroke-width':1,opacity:.6},sv)}
+        if(k>W+1){const ids=[];for(let i=rank;i<rank+3*W;i+=W)ids.push(i);txt(ids.join(',')+'…',{x:gx+gw/2,y:gy+100,'text-anchor':'middle',class:'code'},sv).style.fill='var(--warm)'}
+      }
+    }
+  }
+  el('circle',{cx:60,cy:300,r:12,fill:k>W?'var(--teal)':'var(--card)'},sv);
+  txt(`主节点 MASTER_ADDR:MASTER_PORT（机器 0）`,{x:82,y:305,class:'m'},sv);
+  txt(`WORLD_SIZE = ${NN} × ${NP} = ${W}`,{x:40,y:345,class:'big'},sv);
+  txt(`例：机器 ${NN-1} 上 local_rank ${NP-1} → rank = ${NN-1} × ${NP} + ${NP-1} = ${(NN-1)*NP+NP-1}`,{x:40,y:372,class:'m'},sv);
+  $('nnv').textContent=NN;$('npv').textContent=NP;
+}
+function reset(){k=0;draw()}
+function next(){if(k>=NN*NP+2)return false;k++;draw();return true}
+$('nn').oninput=e=>{ANIM.stop();NN=+e.target.value;k=NN*NP+2;draw()};
+$('np').oninput=e=>{ANIM.stop();NP=+e.target.value;k=NN*NP+2;draw()};
+setupPlayer({captureSeed:1,reset,next},600);
+</script></body></html>

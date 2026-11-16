@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>gather 与 scatter_add</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.cell{font-size:15px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:13px}</style></head>
+<body><main>
+<h1>第 12 章 · gather 按号取，scatter_add 按号加回</h1>
+<p class="sub">配套讲义：<a href="../lessons/12-index-scatter.html">第 12 章 · 索引与散射：按掩码挑、按下标取、按下标写回</a>。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><button id="mg">gather</button><button id="ms">scatter_add</button></div>
+<p class="note">看点：① gather：每行按自己的目标下标取一个数；② scatter_add：值按下标落到格子里，格子 0 被加两次；③ 下方是对应的下标公式。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let mode='g',k=0,auto=true;
+const P=[[0.7,0.2,0.1],[0.1,0.3,0.6]],T=[0,2];
+const IDX=[0,2,0,1],SRC=[1,2,3,4];
+function cell(x,y,v,on,col){el('rect',{x:x-32,y,width:64,height:36,rx:6,fill:on?'var(--accent-bg)':'var(--bg)',stroke:on?'var(--accent)':'var(--line)','stroke-width':on?2:1},sv);const t=txt(v,{x,y:y+24,'text-anchor':'middle',class:'cell'},sv);if(col)t.style.fill=col;return t}
+function draw(){
+  clear(sv);
+  $('mg').classList.toggle('on',mode==='g');$('ms').classList.toggle('on',mode==='s');
+  if(mode==='g'){
+    txt('gather：logp.gather(1, tgt.unsqueeze(1))',{x:340,y:26,'text-anchor':'middle',class:'cap'},sv);
+    txt('概率（取 log 前）',{x:120,y:64,class:'m'},sv);
+    for(let i=0;i<2;i++){
+      txt(`样本 ${i}`,{x:60,y:110+i*70,class:'m'},sv);
+      txt(`tgt = ${T[i]}`,{x:60,y:126+i*70,class:'code'},sv).style.fill='var(--amber)';
+      for(let j=0;j<3;j++){const on=k>i&&j===T[i];cell(180+j*80,86+i*70,P[i][j],on)}
+      if(k>i){
+        el('line',{x1:180+T[i]*80+32,y1:104+i*70,x2:470,y2:104+i*70,stroke:'var(--warm)','stroke-width':2},sv);
+        cell(510,86+i*70,Math.log(P[i][T[i]]).toFixed(4),true,'var(--warm)');
+        txt(`out[${i}][0] = logp[${i}][ tgt[${i}] ] = logp[${i}][${T[i]}]`,{x:340,y:270+i*26,'text-anchor':'middle',class:'code'},sv);
+      }
+    }
+    txt('输出',{x:495,y:64,class:'m'},sv);
+  }else{
+    txt('scatter_add：out.scatter_add(0, idx, src)',{x:340,y:26,'text-anchor':'middle',class:'cap'},sv);
+    txt('src',{x:40,y:100,class:'m'},sv);txt('idx',{x:40,y:150,class:'m'},sv);txt('out',{x:40,y:280,class:'m'},sv);
+    const acc=[0,0,0];
+    for(let n=0;n<4;n++){
+      const on=n===k-1;
+      cell(130+n*90,76,SRC[n],on);
+      const t=txt(IDX[n],{x:130+n*90,y:150,'text-anchor':'middle',class:'cell'},sv);t.style.fill='var(--amber)';
+      if(n<k){acc[IDX[n]]+=SRC[n];el('line',{x1:130+n*90,y1:160,x2:200+IDX[n]*140,y2:256,stroke:on?'var(--warm)':'var(--line)','stroke-width':on?2:1},sv)}
+    }
+    for(let j=0;j<3;j++){const on=k>0&&IDX[k-1]===j;cell(200+j*140,256,acc[j],on);txt(`位置 ${j}`,{x:200+j*140,y:312,'text-anchor':'middle',class:'m'},sv)}
+    if(k>0){const n=k-1;txt(`第 ${n} 个：out[ idx[${n}] ] += src[${n}] → out[${IDX[n]}] += ${SRC[n]}`,{x:340,y:350,'text-anchor':'middle',class:'code'},sv)}
+    if(k>=4)txt('位置 0 收到 1 和 3，加起来是 4；不带 add 的 scatter_ 会互相覆盖',{x:340,y:378,'text-anchor':'middle',class:'m'},sv);
+  }
+}
+function lim(){return mode==='g'?2:4}
+function reset(){k=0;if(auto)mode='g';draw()}
+function next(){if(k<lim()){k++;draw();return true}if(auto&&mode==='g'){mode='s';k=0;draw();return true}return false}
+$('mg').onclick=()=>{ANIM.stop();auto=false;mode='g';k=0;draw()};
+$('ms').onclick=()=>{ANIM.stop();auto=false;mode='s';k=0;draw()};
+setupPlayer({captureSeed:1,reset,next},1200);
+</script></body></html>

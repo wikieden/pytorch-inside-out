@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inductor 融合</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}</style></head>
+<body><main>
+<h1>第 31 章 · 从算子链到生成代码</h1>
+<p class="sub">配套讲义：<a href="../lessons/31-read-inductor.html">第 31 章 · 读 Inductor 生成的代码：它已经帮你融了什么</a>。kernel 名字是本机 torch 2.15.0 CPU 实测的。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><select id="ex"><option value="0">softmax(x * 2)</option><option value="1">gelu(x @ w + b)</option><option value="2">sin → cos → mul → sum</option></select></div>
+<p class="note">看点：① 左边 eager 每个算子一个 kernel；② Inductor 把可融合的圈成同色一组，矩阵乘标"extern 调库"；③ 右边是生成的 call 函数，kernel 名列出了融进去的算子。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const EX=[
+ {ops:['mul ×2','amax','sub','exp','sum','div'],groups:[[0,5,'f']],calls:['buf0 = empty_strided((8, 64), ...)','cpp_fused__softmax_abs_all_amax_eq_mul_ne_sub_0(arg0_1, ..., buf0)','return (buf0, )'],note:'整条 softmax 链一个 kernel：读一次、写一次'},
+ {ops:['mm','+ b','gelu'],groups:[[0,1,'e'],[2,2,'f']],calls:['buf0 = empty_strided((8, 32), ...)','extern_kernels.addmm(arg2_1, arg0_1, arg1_1, out=buf0)','cpp_fused_gelu_0(buf1)','return (buf1, )'],note:'矩阵乘 + 偏置交给库（addmm），GELU 自己生成'},
+ {ops:['sin','cos','mul','sum'],groups:[[0,3,'f']],calls:['buf0 = empty_strided((64, ), ...)','cpp_fused_cos_mul_sin_sum_0(arg0_1, buf0)','return (buf0, )'],note:'4 个算子、3 个中间张量 → 1 个 kernel、0 个中间 buf'}];
+let ei=0,k=0,auto=true;
+function draw(){
+  clear(sv);const E=EX[ei];
+  txt(k===0?'eager：每个算子一个 kernel':k===1?'Inductor 分组：同色 = 融成一个 kernel':'生成的 call 函数',{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  const bx=40,bw=170,bh=36;
+  E.ops.forEach((o,i)=>{
+    const y=50+i*(bh+8);let fill='var(--bg)',stroke='var(--line)';
+    if(k>=1){const g=E.groups.find(g=>i>=g[0]&&i<=g[1]);fill=g[2]==='e'?'var(--card)':'var(--accent-bg)';stroke=g[2]==='e'?'var(--purple)':'var(--accent)'}
+    el('rect',{x:bx,y,width:bw,height:bh,rx:6,fill,stroke},sv);
+    txt(o,{x:bx+12,y:y+23,class:'big'},sv);
+    if(k===0)txt('kernel '+(i+1),{x:bx+bw-12,y:y+23,'text-anchor':'end',class:'m'},sv);
+  });
+  if(k>=1)E.groups.forEach(g=>{
+    const y0=50+g[0]*(bh+8)-4,y1=50+g[1]*(bh+8)+bh+4;
+    el('rect',{x:bx-8,y:y0,width:bw+16,height:y1-y0,rx:10,fill:'none',stroke:g[2]==='e'?'var(--purple)':'var(--accent)','stroke-width':2,'stroke-dasharray':g[2]==='e'?'5 3':''},sv);
+    txt(g[2]==='e'?'extern：调库':'fused：生成',{x:bx+bw+16,y:(y0+y1)/2+4,class:'m'},sv).style.fill=g[2]==='e'?'var(--purple)':'var(--accent)';
+  });
+  if(k>=2){
+    const cx=300;el('rect',{x:cx,y:50,width:360,height:30+E.calls.length*26,rx:8,fill:'var(--card)',stroke:'var(--line)'},sv);
+    txt('def call(args):',{x:cx+10,y:70,class:'code'},sv);
+    E.calls.forEach((c,i)=>{const t=txt('    '+(c.length>44?c.slice(0,44)+'…':c),{x:cx+10,y:96+i*26,class:'code'},sv);if(c.includes('fused'))t.style.fill='var(--accent)';if(c.includes('extern'))t.style.fill='var(--purple)'});
+    const nk=E.groups.length;
+    txt(`eager ${E.ops.length} 个 kernel → 编译后 ${nk} 个`,{x:cx,y:300,class:'big'},sv);
+    txt(E.note,{x:cx,y:326,class:'m'},sv);
+  }
+}
+function reset(){k=0;if(auto)ei=0;$('ex').value=ei;draw()}
+function next(){if(k<2){k++;draw();return true}if(auto&&ei<EX.length-1){ei++;k=0;$('ex').value=ei;draw();return true}return false}
+$('ex').onchange=e=>{ANIM.stop();auto=false;ei=+e.target.value;k=0;draw()};
+setupPlayer({captureSeed:1,reset,next},1300);
+</script></body></html>

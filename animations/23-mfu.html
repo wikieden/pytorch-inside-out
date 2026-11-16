@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MFU 计算器</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:15px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:13px}</style></head>
+<body><main>
+<h1>第 23 章 · MFU 计算器</h1>
+<p class="sub">配套讲义：<a href="../lessons/23-perf-method.html">第 23 章 · 调优方法论：先算账，再测量，只改瓶颈</a>。MFU = 6N × token/s ÷（卡数 × 每卡峰值）。显卡峰值按 bf16 稠密。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><label>参数（B）</label><input type="range" id="np" min="1" max="70" value="7"><span id="npv"></span></div>
+<div class="row ctl"><label>token/s（千）</label><input type="range" id="tk" min="5" max="400" step="5" value="96"><span id="tkv"></span></div>
+<div class="row ctl"><label>卡数</label><input type="range" id="ng" min="1" max="64" value="8"><span id="ngv"></span><select id="gpu"><option value="989">H100（989 TFLOPS）</option><option value="312">A100（312 TFLOPS）</option><option value="2250">B200（约 2250 TFLOPS）</option></select></div>
+<p class="note">看点：① 左边一步步代入公式；② 右边仪表盘按 &lt;20% 红、20–40% 黄、40–50% 蓝、≥50% 绿着色；③ 下方是一个编出来的典型时间分解，提示瓶颈去哪章看。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let N=7,TK=96,G=8,PK=989,k=0;
+const sci=v=>{const e=Math.floor(Math.log10(v));return `${(v/10**e).toFixed(2)} × 10^${e}`};
+function draw(){
+  clear(sv);
+  const flops=6*N*1e9,use=flops*TK*1e3,peak=G*PK*1e12,mfu=use/peak;
+  txt('MFU 怎么算',{x:30,y:30,class:'cap'},sv);
+  const lines=[
+    [`① 每 token：6N = 6 × ${N} × 10^9 = ${sci(flops)} FLOPs`],
+    [`② × 吞吐 ${TK} 千 token/s = ${sci(use)} FLOPS`],
+    [`③ 总峰值：${G} × ${PK} TFLOPS = ${sci(peak)} FLOPS`],
+    [`④ MFU = ② ÷ ③ = ${(mfu*100).toFixed(1)}%`]];
+  lines.forEach((l,i)=>{if(i<k){const t=txt(l[0],{x:30,y:70+i*34,class:'code'},sv);if(i===3)t.style.fill='var(--warm)'}});
+  // gauge
+  const cx=560,cy=150,R=80;
+  el('path',{d:`M${cx-R},${cy} A${R},${R} 0 0 1 ${cx+R},${cy}`,fill:'none',stroke:'var(--card)','stroke-width':18},sv);
+  if(k>=4){
+    const v=Math.min(mfu,1),a=Math.PI*(1-v);
+    const col=mfu<0.2?'var(--bad)':mfu<0.4?'var(--amber)':mfu<0.5?'var(--accent)':'var(--good)';
+    el('path',{d:`M${cx-R},${cy} A${R},${R} 0 0 1 ${cx+R*Math.cos(a)},${cy-R*Math.sin(a)}`,fill:'none',stroke:col,'stroke-width':18},sv);
+    txt(`${(mfu*100).toFixed(1)}%`,{x:cx,y:cy-10,'text-anchor':'middle',class:'big'},sv).style.fill=col;
+    txt(mfu>1?'超过 100%：数据有误':mfu<0.2?'明显有浪费':mfu<0.4?'还有空间':mfu<0.5?'不错（MoE 已是一流）':'好成绩（dense）',{x:cx,y:cy+24,'text-anchor':'middle',class:'m'},sv);
+  }
+  txt('MFU',{x:cx,y:cy-R-16,'text-anchor':'middle',class:'m'},sv);
+  // breakdown
+  if(k>=5){
+    const busy=Math.min(mfu/0.6,1);const rest=1-busy;
+    const parts=[['matmul 有效计算',busy,'var(--good)'],['访存受限小算子',rest*0.35,'var(--accent)'],['通信未重叠',rest*0.3,'var(--purple)'],['GPU 闲着',rest*0.35,'var(--bad)']];
+    let x=30;txt('一步训练的时间都去哪了（编的典型分布）',{x:30,y:262,class:'m'},sv);
+    parts.forEach(([n,f,c])=>{const w=f*620;if(w<1)return;el('rect',{x,y:272,width:w,height:30,fill:c,opacity:.85},sv);x+=w});
+    let lx=30;parts.forEach(([n,f,c])=>{el('rect',{x:lx,y:316,width:12,height:12,fill:c},sv);txt(`${n} ${(f*100).toFixed(0)}%`,{x:lx+16,y:327,class:'m'},sv);lx+=160});
+    txt('闲着 → 第 25、28 章　访存 → 第 28、29 章　算力 → 第 26 章　通信 → 第 18–21 章',{x:30,y:365,class:'m'},sv);
+  }
+  $('npv').textContent=N+'B';$('tkv').textContent=TK+' 千';$('ngv').textContent=G;
+}
+function reset(){k=0;draw()}
+function next(){if(k>=5)return false;k++;draw();return true}
+$('np').oninput=e=>{N=+e.target.value;k=5;draw()};
+$('tk').oninput=e=>{TK=+e.target.value;k=5;draw()};
+$('ng').oninput=e=>{G=+e.target.value;k=5;draw()};
+$('gpu').onchange=e=>{PK=+e.target.value;k=5;draw()};
+setupPlayer({captureSeed:1,reset,next},1300);
+</script></body></html>

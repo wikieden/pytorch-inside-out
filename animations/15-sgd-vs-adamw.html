@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SGD 与 AdamW</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:12px}</style></head>
+<body><main>
+<h1>第 15 章 · SGD 与 AdamW 在狭长山谷里</h1>
+<p class="sub">配套讲义：<a href="../lessons/15-loss-optimizer.html">第 15 章 · 损失与优化器：cross_entropy 的细节和 AdamW 的一步</a>。loss = ½(a·x² + y²)：x 方向陡、y 方向平。起点 (−4, 3)，SGD 学习率取 1.85 / a（再大 x 方向就发散），AdamW 学习率 0.35 并线性衰减到 0（不衰减的话 Adam 会在学习率量级上来回晃，第 9 章）。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><label>陡度比 a</label><input type="range" id="ra" min="2" max="30" value="15"><span id="rav">15</span></div>
+<p class="note">看点：① SGD（橙）在陡的 x 方向来回震荡、平的 y 方向挪得慢；② AdamW（蓝）每个方向除以自己的 √v，两个方向步子差不多大，路线更直；③ 右边表格是 AdamW 每步的 m、v 和更新量（x 方向）。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let A=15,k=0,S,AD,rows;
+const LA=0.35,B1=0.9,B2=0.999,EPS=1e-8;
+function g(p){return [A*p[0],p[1]]}
+function reset(){k=0;S=[[-4,3]];AD={p:[-4,3],m:[0,0],v:[0,0],path:[[-4,3]]};rows=[];draw()}
+function next(){
+  if(k>=30)return false;k++;
+  const s=S[S.length-1],gs=g(s);const lr=1.85/A;S.push([s[0]-lr*gs[0],s[1]-lr*gs[1]]);
+  const gp=g(AD.p),t=k;const upd=[0,0];
+  for(let i=0;i<2;i++){AD.m[i]=B1*AD.m[i]+(1-B1)*gp[i];AD.v[i]=B2*AD.v[i]+(1-B2)*gp[i]**2;const mh=AD.m[i]/(1-B1**t),vh=AD.v[i]/(1-B2**t);upd[i]=LA*(1-(t-1)/30)*mh/(Math.sqrt(vh)+EPS);AD.p[i]-=upd[i]}
+  AD.path.push([...AD.p]);rows.push([k,gp[0],AD.m[0],AD.v[0],upd[0]]);
+  draw();return true;
+}
+function draw(){
+  clear(sv);
+  txt(`第 ${k} 步`,{x:220,y:24,'text-anchor':'middle',class:'cap'},sv);
+  const X=x=>220+x*45,Y=y=>210-y*45;
+  for(const c of [1,4,9,16,25]){el('ellipse',{cx:X(0),cy:Y(0),rx:45*Math.sqrt(2*c/A),ry:45*Math.sqrt(2*c),fill:'none',stroke:'var(--line)'},sv)}
+  el('circle',{cx:X(0),cy:Y(0),r:4,fill:'var(--good)'},sv);
+  const pl=(P,c)=>el('polyline',{points:P.map(p=>`${X(Math.max(-4.8,Math.min(4.8,p[0])))},${Y(Math.max(-4,Math.min(4,p[1])))}`).join(' '),fill:'none',stroke:c,'stroke-width':2},sv);
+  pl(S,'var(--warm)');pl(AD.path,'var(--accent)');
+  txt('SGD',{x:30,y:380,class:'code'},sv).style.fill='var(--warm)';txt('AdamW',{x:80,y:380,class:'code'},sv).style.fill='var(--accent)';
+  const dist=p=>Math.hypot(p[0],p[1]).toFixed(2);
+  txt('橙：x 方向来回震荡；蓝：两个方向步子差不多大',{x:140,y:380,class:'m'},sv);
+  // table
+  const tx=440;txt('AdamW（x 方向）',{x:tx,y:50,class:'m'},sv);
+  txt('步   g      m      v      更新',{x:tx,y:72,class:'code'},sv);
+  rows.slice(-10).forEach((r,i)=>{txt(`${String(r[0]).padStart(2)}  ${r[1].toFixed(2).padStart(6)} ${r[2].toFixed(2).padStart(6)} ${r[3].toFixed(2).padStart(6)} ${r[4].toFixed(3).padStart(6)}`,{x:tx,y:94+i*20,class:'code'},sv)});
+  txt('更新 = lr × m̂ / √v̂：和 g 的绝对大小无关',{x:tx,y:310,class:'m'},sv);
+  $('rav').textContent=A;
+}
+$('ra').oninput=e=>{ANIM.stop();A=+e.target.value;reset()};
+setupPlayer({captureSeed:1,reset,next},350);
+</script></body></html>

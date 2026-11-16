@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ring all-reduce</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:12px}</style></head>
+<body><main>
+<h1>第 17 章 · ring all-reduce：两个阶段，各 N − 1 轮</h1>
+<p class="sub">配套讲义：<a href="../lessons/17-collectives.html">第 17 章 · 集合通信：五个动词和它们的代价</a>。第 i 张卡的数据每段都是 i + 1，切成 N 段（每段一种颜色）。目标：每张卡每段都等于总和。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><label>卡数 N</label><input type="range" id="nn" min="3" max="6" value="4"><span id="nnv">4</span></div>
+<p class="note">看点：① reduce_scatter：每轮每张卡把一段发给右边，右边加到自己那段上；N − 1 轮后每张卡有一段是完整的和（加粗）；② all_gather：完整的段再转 N − 1 轮；③ 每张卡总共发 2(N − 1) 段，每段 K / N。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const COLS=['var(--accent)','var(--warm)','var(--teal)','var(--purple)','var(--amber)','var(--good)'];
+let N=4,k=0,D,full,sent;
+function init(){D=[...Array(N)].map((_,i)=>Array(N).fill(i+1));full=[...Array(N)].map(()=>Array(N).fill(false));sent=0;k=0}
+function stepOnce(t){ // t = 0..2N-3
+  const nd=D.map(r=>[...r]),nf=full.map(r=>[...r]);
+  for(let i=0;i<N;i++){
+    const to=(i+1)%N;
+    if(t<N-1){const c=((i-t)%N+N)%N;nd[to][c]=D[to][c]+D[i][c];if(t===N-2)nf[to][c]=true}
+    else{const tt=t-(N-1);const c=((i+1-tt)%N+N)%N;nd[to][c]=D[i][c];nf[to][c]=true}
+  }
+  D=nd;full=nf;sent++;
+}
+function draw(){
+  clear(sv);
+  const total=N*(N+1)/2,R=120,cx=200,cy=210;
+  const phase=k===0?'初始':k<=N-1?`reduce_scatter 第 ${k} / ${N-1} 轮`:`all_gather 第 ${k-N+1} / ${N-1} 轮`;
+  txt(phase,{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  for(let i=0;i<N;i++){
+    const a=-Math.PI/2+i*2*Math.PI/N,x=cx+R*Math.cos(a),y=cy+R*Math.sin(a);
+    const a2=-Math.PI/2+(i+1)*2*Math.PI/N;
+    el('path',{d:`M${x+(cx+R*Math.cos(a2)-x)*0.25},${y+(cy+R*Math.sin(a2)-y)*0.25} L${x+(cx+R*Math.cos(a2)-x)*0.75},${y+(cy+R*Math.sin(a2)-y)*0.75}`,stroke:'var(--line)','stroke-width':1.5,'marker-end':'url(#ar)'},sv);
+    const bw=18;
+    for(let c=0;c<N;c++){
+      const bx=x-N*bw/2+c*bw,by=y-14;
+      el('rect',{x:bx,y:by,width:bw-2,height:28,fill:COLS[c],opacity:full[i][c]?1:.35,stroke:full[i][c]?'var(--text)':'none'},sv);
+      txt(D[i][c],{x:bx+bw/2-1,y:by+19,'text-anchor':'middle',class:'code'},sv).style.fill=full[i][c]?'#fff':'var(--text)';
+    }
+    txt(`卡 ${i}`,{x,y:y+32,'text-anchor':'middle',class:'m'},sv);
+  }
+  const d=el('defs',{},sv),m=el('marker',{id:'ar',viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:6,markerHeight:6,orient:'auto'},d);el('path',{d:'M0,0 L10,5 L0,10 z',fill:'var(--muted)'},m);
+  const tx=410;
+  txt(`总和应为 1 + … + ${N} = ${total}`,{x:tx,y:80,class:'big'},sv);
+  txt(`每张卡已发送：${sent} 段 × K/${N}`,{x:tx,y:120,class:'m'},sv);
+  txt(`全部做完：2 × (${N}−1) × K/${N} = ${(2*(N-1)/N).toFixed(2)} K`,{x:tx,y:146,class:'m'},sv);
+  if(k===N-1)txt('每张卡恰好有一段是完整的和 ← reduce_scatter 的结果',{x:tx,y:190,class:'m'},sv).style.fill='var(--warm)';
+  if(k===2*N-2)txt('每张卡每段都是完整的和 ← all_reduce 完成',{x:tx,y:190,class:'m'},sv).style.fill='var(--good)';
+  $('nnv').textContent=N;
+}
+function reset(){init();draw()}
+function next(){if(k>=2*N-2)return false;stepOnce(k);k++;draw();return true}
+$('nn').oninput=e=>{ANIM.stop();N=+e.target.value;reset()};
+setupPlayer({captureSeed:1,reset,next},1300);
+</script></body></html>

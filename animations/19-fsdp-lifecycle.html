@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FSDP2 分片与收集</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 19 章 · FSDP：每卡只存一片，用到时再拼</h1>
+<p class="sub">配套讲义：<a href="../lessons/19-fsdp2.html">第 19 章 · FSDP2：每卡只存一片，用到时再拼</a>。4 张卡、4 层，每层参数切成 4 片（颜色 = 归哪张卡）。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><button id="tr"></button></div>
+<p class="note">看点：① 平时每卡每层只有自己颜色那一片；② 前向到第 n 层：all_gather 拼完整，算完（reshard=True 时）丢掉；③ 反向从第 4 层往回：再拼、算、丢，并 reduce_scatter 梯度；④ 右边柱子是"此刻每卡存了几层完整参数"。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const COLS=['var(--accent)','var(--warm)','var(--teal)','var(--purple)'];
+const NL=4,NG=4;
+let rs=true,k=0;
+// steps: 0 idle; 1..4 fwd layer; 5..8 bwd layer 4..1; 9 optimizer
+function fullAt(k){ // set of layers full on each gpu at step k
+  const S=new Set();
+  if(k>=1&&k<=4){S.add(k-1);if(!rs)for(let l=0;l<k-1;l++)S.add(l)}
+  if(k>=5&&k<=8){const cur=NL-1-(k-5);S.add(cur);if(!rs)for(let l=0;l<cur;l++)S.add(l)}
+  return S;
+}
+function draw(){
+  clear(sv);
+  const caps=['平时：每卡每层只存 1/4','前向 层 1：all_gather 拼完整 → 算','前向 层 2','前向 层 3','前向 层 4','反向 层 4：'+(rs?'再 all_gather → ':'')+'算梯度 → reduce_scatter 梯度','反向 层 3','反向 层 2','反向 层 1','opt.step()：每卡只更新自己那片'];
+  txt(caps[k],{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  const F=fullAt(k),cur=k>=1&&k<=4?k-1:k>=5&&k<=8?NL-1-(k-5):-1;
+  for(let g=0;g<NG;g++){
+    const gx=30+g*125;
+    el('rect',{x:gx,y:46,width:115,height:250,rx:8,fill:'var(--card)',stroke:'var(--line)'},sv);
+    txt(`卡 ${g}`,{x:gx+57,y:64,'text-anchor':'middle',class:'big'},sv);
+    for(let l=0;l<NL;l++){
+      const ly=80+(NL-1-l)*52;
+      txt(`层 ${l+1}`,{x:gx+6,y:ly+26,class:'m'},sv);
+      for(let s=0;s<NG;s++){
+        const own=s===g,show=own||F.has(l);
+        el('rect',{x:gx+42+s*17,y:ly+6,width:15,height:30,fill:show?COLS[s]:'var(--bg)',opacity:show?(own?1:.75):1,stroke:l===cur?'var(--text)':'none'},sv);
+      }
+      if(k>=5&&k<=8&&l>=cur){const t=txt('∇',{x:gx+42+g*17+7,y:ly+50,'text-anchor':'middle',class:'m'},sv);t.style.fill=COLS[g]}
+    }
+  }
+  // memory bar
+  const n=F.size,bx=545;
+  txt('每卡完整层数',{x:bx,y:320,class:'m'},sv);
+  for(let i=0;i<NL;i++)el('rect',{x:bx+i*28,y:330,width:24,height:24,fill:i<n?'var(--warm)':'var(--bg)',stroke:'var(--line)'},sv);
+  txt(`reshard_after_forward = ${rs?'True':'False'}`,{x:30,y:325,class:'big'},sv);
+  txt(rs?'前向后丢掉完整参数，反向要再 all_gather 一次（省显存，多通信）':'前向后留着完整参数，反向不用再拼（省通信，显存高）',{x:30,y:350,class:'m'},sv);
+  txt('通信：前向 all_gather、反向 all_gather（True 时）、梯度 reduce_scatter',{x:30,y:378,class:'m'},sv);
+  $('tr').textContent='reshard_after_forward：'+(rs?'True':'False');
+}
+function reset(){k=0;draw()}
+function next(){if(k>=9)return false;k++;draw();return true}
+$('tr').onclick=()=>{rs=!rs;draw()};
+setupPlayer({captureSeed:1,reset,next},1200);
+</script></body></html>

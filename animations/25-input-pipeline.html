@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>数据管道优化</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 25 章 · 一项项去掉 GPU 的等待</h1>
+<p class="sub">配套讲义：<a href="../lessons/25-input-sync.html">第 25 章 · 让 GPU 别等：数据管道与同步点</a>。每步：读取处理 → 拷贝 → 计算 → 同步。时间是编的，只看趋势。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl" id="sw"></div>
+<p class="note">看点：① 什么都不开时四段首尾相接；② 预分词让读取处理变短；③ workers 让读取处理和计算并行；④ pin + non_blocking 让拷贝和计算重叠；⑤ 去掉每步 .item() 后红色同步块消失。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const OPT=[['预分词','tok'],['num_workers=4','wk'],['pin + non_blocking','pin'],['去掉每步 .item()','item']];
+const on={tok:false,wk:false,pin:false,item:false};let k=0,auto=true;
+const sw=$('sw');
+OPT.forEach(([n,key])=>{const b=document.createElement('button');b.textContent=n;b.onclick=()=>{ANIM.stop();auto=false;on[key]=!on[key];draw()};b.dataset.key=key;sw.appendChild(b)});
+function step(){
+  const load=on.tok?6:24,copy=4,comp=30,sync=on.item?0:3;
+  // per-step time
+  const loadVis=on.wk?Math.max(0,load/4-comp):load; // parallel workers hide it if faster than compute
+  const copyVis=on.pin?0:copy;
+  return {load,copy,comp,sync,loadVis,copyVis,total:loadVis+copyVis+comp+sync};
+}
+function draw(){
+  clear(sv);[...sw.children].forEach(b=>b.classList.toggle('on',on[b.dataset.key]));
+  const S=step(),X=v=>70+v*2.2;
+  txt(`每步 ${S.total} 单位，GPU 忙碌 ${(S.comp/S.total*100).toFixed(0)}%`,{x:340,y:26,'text-anchor':'middle',class:'cap'},sv);
+  for(let s=0;s<3;s++){
+    const y=60+s*70;let t=s*S.total;
+    txt(`第 ${s+1} 步`,{x:14,y:y+30,class:'m'},sv);
+    const seg=(w,c,lab,yy=y,h=40)=>{if(w<=0)return;el('rect',{x:X(t),y:yy,width:w*2.2-1,height:h,rx:3,fill:c,opacity:.85},sv);if(w*2.2>40)txt(lab,{x:X(t)+w*1.1,y:yy+h/2+4,'text-anchor':'middle',class:'m'},sv).style.fill='#fff';t+=w};
+    seg(S.loadVis,'var(--muted)','读取处理');seg(S.copyVis,'var(--purple)','拷贝');
+    const t0=t;seg(S.comp,'var(--accent)','计算');
+    if(on.wk&&S.loadVis===0){el('rect',{x:X(t0),y:y+42,width:(S.load/4)*2.2,height:8,fill:'var(--muted)',opacity:.6},sv)}
+    if(on.pin){el('rect',{x:X(t0),y:y+52,width:S.copy*2.2,height:8,fill:'var(--purple)',opacity:.6},sv)}
+    seg(S.sync,'var(--bad)','');
+  }
+  txt('细条 = 与计算并行进行的读取（workers）和拷贝（另一条 stream）',{x:70,y:290,class:'m'},sv);
+  const list=OPT.map(([n,key])=>`${on[key]?'✓':'·'} ${n}`).join('　');
+  txt(list,{x:70,y:330,class:'big'},sv);
+}
+function reset(){k=0;if(auto)Object.keys(on).forEach(x=>on[x]=false);draw()}
+function next(){if(k>=OPT.length)return false;on[OPT[k][1]]=true;k++;draw();return true}
+setupPlayer({captureSeed:1,reset,next},1500);
+</script></body></html>

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>显存曲线</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 27 章 · 一步训练的显存曲线</h1>
+<p class="sub">配套讲义：<a href="../lessons/27-memory.html">第 27 章 · 显存：谁占了、怎么省、怎么看</a>。每层激活 9 份、每层输入 1 份（单位是编的，比例接近讲义里的实测）；模型状态固定 30 份。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><button id="tc"></button><label>层数</label><input type="range" id="nl" min="2" max="12" value="6"><span id="nlv">6</span></div>
+<p class="note">看点：① 前向每过一层激活叠一块，峰值在前向结束处；② 反向时激活用完释放、曲线回落；③ 打开重计算：每层只存输入（细块），反向时临时叠一块重算的激活再释放，峰值低、时间长。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let L=6,ck=false,k=0,auto=true;
+const ST=30,ACT=9,INP=1;
+function series(){ // list of memory points per tick: forward L ticks, backward L ticks (ckpt: 2 ticks per layer)
+  const pts=[ST];let m=ST;
+  for(let l=0;l<L;l++){m+=ck?INP:ACT;pts.push(m)}
+  for(let l=L-1;l>=0;l--){
+    if(ck){pts.push(m+ACT);m-=INP;pts.push(m)}
+    else{m-=ACT;pts.push(m)}
+  }
+  pts.push(ST+4);pts.push(ST);
+  return pts;
+}
+function draw(){
+  clear(sv);
+  const P=series(),N=P.length,maxY=ST+12*ACT+10;
+  const X=i=>60+i*(590/Math.max(N-1,1)),Y=v=>330-v/maxY*270;
+  txt(ck?'激活重计算：每层只存输入，反向时重算':'不重计算：每层激活都存着',{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  el('rect',{x:60,y:Y(ST),width:590,height:330-Y(ST),fill:'var(--muted)',opacity:.35},sv);
+  txt('模型状态（参数 + 梯度 + 优化器）',{x:66,y:Y(ST/2),class:'m'},sv);
+  const upto=Math.min(k,N-1);
+  let d=`M${X(0)},${Y(P[0])}`;for(let i=1;i<=upto;i++)d+=` L${X(i)},${Y(P[i])}`;
+  el('path',{d,fill:'none',stroke:'var(--accent)','stroke-width':2.5},sv);
+  for(let i=0;i<=upto;i++)el('circle',{cx:X(i),cy:Y(P[i]),r:3,fill:'var(--accent)'},sv);
+  const peak=Math.max(...P.slice(0,upto+1));
+  el('line',{x1:60,y1:Y(peak),x2:650,y2:Y(peak),stroke:'var(--bad)','stroke-dasharray':'4 3'},sv);
+  txt(`峰值 ${peak}`,{x:600,y:Y(peak)-6,class:'m'},sv).style.fill='var(--bad)';
+  const fEnd=L;el('line',{x1:X(fEnd),y1:50,x2:X(fEnd),y2:330,stroke:'var(--line)'},sv);
+  txt('前向',{x:(X(0)+X(fEnd))/2,y:350,'text-anchor':'middle',class:'m'},sv);
+  txt('反向',{x:(X(fEnd)+X(N-3))/2,y:350,'text-anchor':'middle',class:'m'},sv);
+  txt('step',{x:X(N-2),y:350,'text-anchor':'middle',class:'m'},sv);
+  if(k>=N-1){
+    ck=!ck;const oS=series(),oP=Math.max(...oS),oN=oS.length;ck=!ck;
+    txt(`峰值 ${peak}（${ck?'不重计算':'重计算'}时 ${oP}）；步数 ${N}（${ck?'不重计算':'重计算'}时 ${oN}）`,{x:60,y:380,class:'big'},sv);
+  }
+  $('tc').textContent='激活重计算：'+(ck?'开':'关');$('nlv').textContent=L;
+}
+function reset(){k=0;if(auto)ck=false;draw()}
+function next(){const N=series().length;if(k<N-1){k++;draw();return true}if(auto&&!ck){ck=true;k=0;draw();return true}return false}
+$('tc').onclick=()=>{ANIM.stop();auto=false;ck=!ck;k=99;draw()};
+$('nl').oninput=e=>{ANIM.stop();auto=false;L=+e.target.value;k=99;draw()};
+setupPlayer({captureSeed:1,reset,next},500);
+</script></body></html>

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>roofline</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:13px;font-weight:500}</style></head>
+<body><main>
+<h1>第 29 章 · roofline：算子落在哪</h1>
+<p class="sub">配套讲义：<a href="../lessons/29-why-fusion.html">第 29 章 · 为什么融合能变快：算力受限与访存受限</a>。可达算力 = min(峰值, 算术强度 × 带宽)。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><select id="hw"><option value="h">H100（989 TFLOPS，3.35 TB/s）</option><option value="m">本机 Mac GPU（≈13.7 TFLOPS，≈0.47 TB/s）</option></select><label>矩阵乘 n</label><input type="range" id="nn" min="5" max="13" value="12"><span id="nnv"></span></div>
+<p class="note">看点：① 斜坡（访存受限）和平顶（算力受限）交于拐点；② add、GELU、LayerNorm 都在斜坡上；③ 融合三个逐元素算子后点右移、变高；④ 矩阵乘 n 调小会滑到斜坡上。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let HW='h',LN=12,k=0;
+const HWS={h:{P:989e12,B:3.35e12,name:'H100'},m:{P:13.7e12,B:0.47e12,name:'本机'}};
+function pts(){
+  const n=2**LN;
+  return [
+    ['add（fp32）',1/12,'var(--warm)'],
+    ['GELU（fp32）',10/8,'var(--warm)'],
+    ['LayerNorm（bf16）',1.5,'var(--warm)'],
+    ['gelu(x+b)·s 融合前（3 个 kernel 平均）',12/(8*4),'var(--amber)'],
+    ['gelu(x+b)·s 融合后',12/(4*4),'var(--good)'],
+    [`矩阵乘 n=${n}（bf16）`,n/3,'var(--accent)']];
+}
+function draw(){
+  clear(sv);
+  const H=HWS[HW],ridge=H.P/H.B;
+  const lx=v=>70+(Math.log10(v)+2)/7*560,ly=v=>330-(Math.log10(v)-9)/6.5*290;
+  txt(`${H.name}：拐点 = ${(H.P/1e12).toFixed(1)} TFLOPS ÷ ${(H.B/1e12).toFixed(2)} TB/s ≈ ${ridge.toFixed(0)} FLOP/字节`,{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  el('line',{x1:70,y1:330,x2:640,y2:330,stroke:'var(--line)'},sv);el('line',{x1:70,y1:40,x2:70,y2:330,stroke:'var(--line)'},sv);
+  [0.01,0.1,1,10,100,1000,1e4,1e5].forEach(v=>{if(lx(v)>640)return;txt(v>=1?v.toString():v.toString(),{x:lx(v),y:346,'text-anchor':'middle',class:'m'},sv)});
+  txt('算术强度（FLOP / 字节，对数）',{x:360,y:368,'text-anchor':'middle',class:'m'},sv);
+  [1e9,1e10,1e11,1e12,1e13,1e14,1e15].forEach(v=>txt(`10^${Math.log10(v)}`,{x:64,y:ly(v)+4,'text-anchor':'end',class:'m'},sv));
+  // roof
+  const a=0.01,b=1e5;
+  el('polyline',{points:`${lx(a)},${ly(a*H.B)} ${lx(ridge)},${ly(H.P)} ${lx(b)},${ly(H.P)}`,fill:'none',stroke:'var(--text)','stroke-width':2},sv);
+  el('line',{x1:lx(ridge),y1:ly(H.P),x2:lx(ridge),y2:330,stroke:'var(--muted)','stroke-dasharray':'3 3'},sv);
+  txt('访存受限',{x:lx(0.3),y:ly(0.3*H.B)-14,class:'m'},sv);txt('算力受限',{x:lx(ridge)+20,y:ly(H.P)-8,class:'m'},sv);
+  pts().slice(0,k).forEach(([n,I,c],i)=>{
+    const P=Math.min(H.P,I*H.B);
+    el('circle',{cx:lx(I),cy:ly(P),r:8,fill:c},sv);
+    txt(i+1,{x:lx(I),y:ly(P)+4,'text-anchor':'middle',class:'m'},sv).style.fill='#fff';
+    const t=txt(`${i+1}. ${n}：${(P/1e12).toFixed(P<1e12?3:1)} TFLOPS`,{x:80,y:58+i*18,class:'big'},sv);t.style.fill=c;
+  });
+  $('nnv').textContent=2**LN;
+}
+function reset(){k=0;draw()}
+function next(){if(k>=pts().length)return false;k++;draw();return true}
+$('hw').onchange=e=>{HW=e.target.value;k=6;draw()};
+$('nn').oninput=e=>{LN=+e.target.value;k=6;draw()};
+setupPlayer({captureSeed:1,reset,next},1300);
+</script></body></html>

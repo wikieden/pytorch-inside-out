@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>张量并行</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.cell{font-size:14px;font-weight:500}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 20 章 · MLP 的张量并行：先列切、再行切</h1>
+<p class="sub">配套讲义：<a href="../lessons/20-dtensor-tp.html">第 20 章 · DeviceMesh、DTensor 与张量并行</a>。Y = ReLU(X W1) W2，X = [1, 2]。蓝色归卡 0，橙色归卡 1。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><button id="tm"></button></div>
+<p class="note">看点：① W1 按列切，每卡算 H 的一半列，不通信；② W2 按行切，正好对上自己那一半 H，每卡得到一个部分和；③ all_reduce 一次得到 [2, 4]，和不切的结果一样。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const W1=[[1,0,1,0],[0,1,0,1]],W2=[[1,0],[0,1],[1,0],[0,1]],X=[1,2];
+let tp=true,k=0;
+const C=['var(--accent)','var(--warm)'];
+function mat(x,y,M,colOf,label,show=true,cw=26){
+  txt(label,{x,y:y-6,class:'m'},sv);
+  M.forEach((row,i)=>row.forEach((v,j)=>{
+    const c=colOf(i,j);
+    el('rect',{x:x+j*cw,y:y+i*cw,width:cw-2,height:cw-2,rx:3,fill:c||'var(--bg)',opacity:c?.85:1,stroke:'var(--line)'},sv);
+    if(show)txt(v,{x:x+j*cw+cw/2-1,y:y+i*cw+18,'text-anchor':'middle',class:'cell'},sv).style.fill=c?'#fff':'var(--text)';
+  }));
+}
+function draw(){
+  clear(sv);
+  if(!tp){
+    const caps=['不切：一张卡算全部','H = ReLU(X W1) = [1, 2, 1, 2]','Y = H W2 = [1+1, 2+2] = [2, 4]'];
+    txt(caps[Math.min(k,2)],{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+    mat(60,80,[X],()=>null,'X');mat(160,80,W1,()=>null,'W1 (2×4)');
+    if(k>=1)mat(320,80,[[1,2,1,2]],()=>null,'H');
+    mat(320,150,W2,()=>null,'W2 (4×2)');
+    if(k>=2)mat(480,150,[[2,4]],()=>null,'Y');
+    return;
+  }
+  const caps=['2 卡 TP：X 两张卡各一份','W1 按列切：卡 0 算 H 的第 0–1 列，卡 1 算第 2–3 列（不通信）','W2 按行切：每卡用自己那半 H 乘自己那半 W2 → 部分和','all_reduce：[1, 2] + [1, 2] = [2, 4]，两张卡都得到 Y'];
+  txt(caps[k],{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  for(let g=0;g<2;g++){
+    const gy=60+g*170;
+    el('rect',{x:20,y:gy,width:640,height:150,rx:10,fill:'var(--card)',stroke:C[g],'stroke-width':1.5},sv);
+    txt(`卡 ${g}`,{x:32,y:gy+20,class:'big'},sv).style.fill=C[g];
+    mat(40,gy+50,[X],()=>null,'X');
+    mat(120,gy+50,W1.map(r=>r.slice(g*2,g*2+2)),()=>C[g],`W1 第 ${g*2}–${g*2+1} 列`);
+    if(k>=1)mat(230,gy+50,[[1,2]],()=>C[g],'H 的一半');
+    if(k>=2){mat(320,gy+30,W2.slice(g*2,g*2+2),()=>C[g],`W2 第 ${g*2}–${g*2+1} 行`);mat(410,gy+50,[[1,2]],()=>null,'部分和 (Partial)')}
+    if(k>=3){mat(560,gy+50,[[2,4]],()=>'var(--good)','Y')}
+  }
+  if(k>=3){el('line',{x1:470,y1:125,x2:470,y2:295,stroke:'var(--good)','stroke-width':2,'stroke-dasharray':'5 3'},sv);txt('all_reduce',{x:478,y:215,class:'m'},sv).style.fill='var(--good)'}
+}
+function reset(){k=0;draw()}
+function next(){const lim=tp?3:2;if(k>=lim)return false;k++;draw();return true}
+$('tm').onclick=()=>{ANIM.stop();tp=!tp;k=0;$('tm').textContent='模式：'+(tp?'2 卡 TP':'不切');draw()};
+$('tm').textContent='模式：2 卡 TP';
+setupPlayer({captureSeed:1,reset,next},1600);
+</script></body></html>

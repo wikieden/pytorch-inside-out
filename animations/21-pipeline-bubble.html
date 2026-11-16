@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>流水线气泡</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}</style></head>
+<body><main>
+<h1>第 21 章 · 流水线并行的气泡</h1>
+<p class="sub">配套讲义：<a href="../lessons/21-pp-cp-ep.html">第 21 章 · 流水线、上下文、专家并行，以及怎么组合</a>。每段前向 1 格、反向 2 格（t_b = 2 t_f，常见比例）。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><label>段数 p</label><input type="range" id="pp" min="2" max="6" value="4"><span id="ppv">4</span><label>micro-batch m</label><input type="range" id="mm" min="1" max="8" value="1"><span id="mmv">1</span><button id="ts"></button></div>
+<p class="note">看点：① m = 1 时大片灰色：大部分时间在等；② m 增大，气泡长度不变但有效工作变多，占比 (p − 1) / m 下降；③ 1F1B 和 AFAB 气泡一样大，但同时存着的激活份数不同（右下）。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+let P=4,M=1,f1b=false,t=0,auto=true;
+const TF=1,TB=2;
+function sched(){ // simulate with dependencies; returns ops per stage [{s,e,type,mb}]
+  const ops=[...Array(P)].map(()=>[]);
+  const fEnd=[...Array(P)].map(()=>Array(M).fill(null)),bEnd=[...Array(P)].map(()=>Array(M).fill(null));
+  // build per-stage order
+  const order=[];
+  for(let s=0;s<P;s++){
+    const o=[];
+    if(!f1b){for(let m=0;m<M;m++)o.push(['F',m]);for(let m=0;m<M;m++)o.push(['B',m])}
+    else{const warm=Math.min(P-s-1,M);let f=0,b=0;for(;f<warm;f++)o.push(['F',f]);while(f<M||b<M){if(f<M){o.push(['F',f]);f++}if(b<M){o.push(['B',b]);b++}}}
+    order.push(o);
+  }
+  const ptr=Array(P).fill(0),free=Array(P).fill(0);let progress=true;
+  while(progress){progress=false;
+    for(let s=0;s<P;s++){
+      if(ptr[s]>=order[s].length)continue;
+      const [ty,m]=order[s][ptr[s]];
+      let dep;
+      if(ty==='F')dep=s===0?0:fEnd[s-1][m];
+      else dep=s===P-1?fEnd[s][m]:bEnd[s+1][m];
+      if(dep===null)continue;
+      const st=Math.max(free[s],dep),e=st+(ty==='F'?TF:TB);
+      ops[s].push({s:st,e,ty,m});(ty==='F'?fEnd:bEnd)[s][m]=e;free[s]=e;ptr[s]++;progress=true;
+    }
+  }
+  const end=Math.max(...free);
+  // peak in-flight activations on stage 0
+  let peak=0;const ev=[];ops[0].forEach(o=>{if(o.ty==='F')ev.push([o.s,1]);else ev.push([o.e,-1])});ev.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);let cur=0;ev.forEach(x=>{cur+=x[1];peak=Math.max(peak,cur)});
+  return {ops,end,peak};
+}
+function draw(){
+  clear(sv);
+  const S=sched(),T=Math.max(S.end,1);
+  const X=v=>90+v/T*560,rowH=Math.min(48,240/P);
+  txt(`${f1b?'1F1B':'AFAB（全部前向再全部反向）'}　p = ${P}，m = ${M}`,{x:340,y:24,'text-anchor':'middle',class:'cap'},sv);
+  for(let s=0;s<P;s++){
+    const y=50+s*rowH;
+    txt(`卡 ${s}`,{x:20,y:y+rowH/2+4,class:'m'},sv);
+    el('rect',{x:X(0),y:y+2,width:X(T)-X(0),height:rowH-6,fill:'var(--card)'},sv);
+    S.ops[s].forEach(o=>{if(o.s>=t)return;const e=Math.min(o.e,t);
+      el('rect',{x:X(o.s),y:y+2,width:Math.max(X(e)-X(o.s)-1,1),height:rowH-6,rx:2,fill:o.ty==='F'?'var(--accent)':'var(--warm)'},sv);
+      if(e===o.e&&X(o.e)-X(o.s)>12)txt(o.m+1,{x:(X(o.s)+X(o.e))/2,y:y+rowH/2+3,'text-anchor':'middle',class:'m'},sv).style.fill='#fff';
+    });
+  }
+  const useful=M*(TF+TB),bub=(S.end-useful)/useful;
+  if(t>=S.end){
+    txt(`每卡有效 ${useful} 格，总长 ${S.end} 格；气泡 / 有效 = ${bub.toFixed(2)}`,{x:90,y:330,class:'big'},sv);
+    txt(`公式 (p − 1) / m = ${P-1} / ${M} = ${((P-1)/M).toFixed(2)}`,{x:90,y:356,class:'m'},sv);
+    txt(`卡 0 同时存着的激活份数：${S.peak}`,{x:90,y:382,class:'m'},sv).style.fill='var(--purple)';
+  }
+  $('ppv').textContent=P;$('mmv').textContent=M;$('ts').textContent='调度：'+(f1b?'1F1B':'AFAB');
+}
+const SEQ=[[4,1,false],[4,8,false],[4,8,true]];let si=0;
+function reset(){t=0;if(auto){si=0;[P,M,f1b]=SEQ[0]}draw()}
+function next(){const S=sched();if(t<S.end){t=Math.min(S.end,t+1);draw();return true}if(auto&&si<SEQ.length-1){si++;[P,M,f1b]=SEQ[si];t=0;draw();return true}return false}
+$('pp').oninput=e=>{ANIM.stop();auto=false;P=+e.target.value;t=1e9;draw()};
+$('mm').oninput=e=>{ANIM.stop();auto=false;M=+e.target.value;t=1e9;draw()};
+$('ts').onclick=()=>{ANIM.stop();auto=false;f1b=!f1b;t=1e9;draw()};
+setupPlayer({captureSeed:1,reset,next},180);
+</script></body></html>

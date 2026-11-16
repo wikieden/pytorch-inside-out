@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>浮点格式</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:13px}</style></head>
+<body><main>
+<h1>第 26 章 · 五种浮点格式的尺子</h1>
+<p class="sub">配套讲义：<a href="../lessons/26-mixed-precision.html">第 26 章 · 混合精度：bf16、fp16、TF32、FP8 怎么选</a>。蓝 = 指数位（管范围），橙 = 尾数位（管精度）。取值按"舍入到最近、超范围变 inf、太小变 0"模拟（次正规数也算进去）。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><label>输入的数（对数刻度）</label><input type="range" id="lv" min="-90" max="60" value="0"><span id="lvv"></span></div>
+<p class="note">看点：① 指数位多的格式（fp32、bf16）两头都表示得了；② fp16 太大变 inf、太小变 0；③ bf16 在中间也很粗：1.001 变 1；FP8 更粗。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const F=[['fp32',8,23],['bf16',8,7],['fp16',5,10],['fp8 E4M3',4,3,448],['fp8 E5M2',5,2]];
+let V=1.001,k=0;
+function q(x,E,M,maxOverride){
+  if(x===0)return 0;const bias=2**(E-1)-1;
+  const maxv=maxOverride||(2-2**-M)*2**(2**E-2-bias);
+  const minN=2**(1-bias);
+  const s=Math.sign(x);x=Math.abs(x);
+  if(x>maxv*(1+2**-(M+1)))return s*Infinity;
+  let e=Math.floor(Math.log2(x));if(e<1-bias)e=1-bias;
+  const step=2**(e-M);const r=Math.round(x/step)*step;
+  return s*Math.min(r,maxv);
+}
+const fmt=v=>!isFinite(v)?'inf':v===0?'0':Math.abs(v)>=1e4||Math.abs(v)<1e-3?v.toExponential(4):v.toPrecision(6);
+function draw(){
+  clear(sv);
+  txt(`输入 x = ${fmt(V)}`,{x:340,y:26,'text-anchor':'middle',class:'cap'},sv);
+  F.forEach(([n,E,M,mo],i)=>{
+    if(i>=k)return;
+    const y=55+i*62,bits=1+E+M,W=8;
+    txt(n,{x:20,y:y+20,class:'big'},sv);
+    let x=110;
+    el('rect',{x,y:y+6,width:W-1,height:20,fill:'var(--muted)'},sv);x+=W;
+    for(let b=0;b<E;b++){el('rect',{x,y:y+6,width:W-1,height:20,fill:'var(--accent)'},sv);x+=W}
+    for(let b=0;b<M;b++){el('rect',{x,y:y+6,width:W-1,height:20,fill:'var(--warm)'},sv);x+=W}
+    const bias=2**(E-1)-1,maxv=mo||(2-2**-M)*2**(2**E-2-bias);
+    txt(`max ${fmt(maxv)}　eps ${fmt(2**-M)}`,{x:110,y:y+44,class:'m'},sv);
+    const r=q(V,E,M,mo);
+    const bad=!isFinite(r)||(r===0&&V!==0);
+    const t=txt(`→ ${fmt(r)}`,{x:520,y:y+22,class:'code'},sv);t.style.fill=bad?'var(--bad)':Math.abs(r-V)/V>1e-4?'var(--amber)':'var(--good)';
+  });
+}
+const DEMO=[1.001,3.14159,1e5,1e-8,70000];let di=0;
+function reset(){k=0;di=0;V=DEMO[0];draw()}
+function next(){if(k<F.length){k++;draw();return true}if(di<DEMO.length-1){di++;V=DEMO[di];$('lvv').textContent=fmt(V);draw();return true}return false}
+$('lv').oninput=e=>{ANIM.stop();k=F.length;V=10**(+e.target.value/10)*1.001;$('lvv').textContent=fmt(V);draw()};
+$('lvv').textContent=fmt(V);
+setupPlayer({captureSeed:1,reset,next},1300);
+</script></body></html>

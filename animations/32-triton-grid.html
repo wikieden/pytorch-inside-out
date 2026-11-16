@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Triton program 网格</title><link rel="stylesheet" href="anim.css">
+<style>svg text.cap{font-size:15px;font-weight:500}svg text.big{font-size:14px;font-weight:500}svg text.code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}</style></head>
+<body><main>
+<h1>第 32 章 · program 网格与 mask</h1>
+<p class="sub">配套讲义：<a href="../lessons/32-triton-model.html">第 32 章 · Triton 编程模型：一个 program 处理一块数据</a>。grid = cdiv(n, BLOCK)；每个 program 负责 offs = pid × BLOCK + arange(0, BLOCK)，mask = offs &lt; n。</p>
+<div class="panel"><svg id="sv" viewBox="0 0 680 400"></svg></div>
+<div class="row"><button id="play">▶ 播放</button><button id="step">→ 单步</button><button id="reset">↺ 从头开始</button></div>
+<div class="row ctl"><label>n</label><input type="range" id="nn" min="100" max="4000" step="100" value="2500"><span id="nnv"></span><label>BLOCK</label><select id="bb"><option>256</option><option>512</option><option selected>1024</option></select></div>
+<p class="note">看点：① 一长条是 n 个元素，按 BLOCK 切段，一段一个 program；② 依次点亮每个 program 的 offs 和 mask；③ 最后一个 program 末尾灰色是被 mask 挡住的越界位置。</p>
+</main>
+<script src="anim.js"></script>
+<script>
+const sv=$('sv');
+const COLS=['var(--accent)','var(--warm)','var(--teal)','var(--purple)','var(--amber)','var(--good)'];
+let N=2500,B=1024,k=0;
+function draw(){
+  clear(sv);
+  const G=Math.ceil(N/B),tot=G*B,X=v=>40+v/tot*600;
+  txt(`n = ${N}，BLOCK = ${B} → grid = cdiv(${N}, ${B}) = ${G} 个 program`,{x:340,y:26,'text-anchor':'middle',class:'cap'},sv);
+  for(let p=0;p<G;p++){
+    const on=p<k,a=p*B,b=Math.min(N,(p+1)*B),e=(p+1)*B;
+    el('rect',{x:X(a),y:70,width:X(b)-X(a)-1,height:44,fill:COLS[p%COLS.length],opacity:on?.9:.25},sv);
+    if(e>N)el('rect',{x:X(N),y:70,width:X(e)-X(N),height:44,fill:'var(--muted)',opacity:on?.5:.15,stroke:'var(--line)','stroke-dasharray':'3 3'},sv);
+    if(on){
+      txt(`pid ${p}`,{x:(X(a)+X(e))/2,y:96,'text-anchor':'middle',class:'big'},sv).style.fill='#fff';
+      const y=150+Math.min(p,5)*34;
+      const t=txt(`pid ${p}：offs ${a}–${e-1}，mask 为真 ${b-a} 个${e>N?`，挡住 ${e-N} 个`:''}`,{x:40,y,class:'code'},sv);t.style.fill=COLS[p%COLS.length];
+    }
+  }
+  txt('0',{x:40,y:132,class:'m'},sv);txt(`n = ${N}`,{x:X(N),y:132,'text-anchor':'middle',class:'m'},sv);
+  if(G>6&&k>6)txt(`…共 ${G} 个`,{x:40,y:150+6*34,class:'m'},sv);
+  $('nnv').textContent=N;
+}
+function reset(){k=0;draw()}
+function next(){if(k>=Math.ceil(N/B))return false;k++;draw();return true}
+$('nn').oninput=e=>{ANIM.stop();N=+e.target.value;k=99;draw()};
+$('bb').onchange=e=>{ANIM.stop();B=+e.target.value;k=99;draw()};
+setupPlayer({captureSeed:1,reset,next},1000);
+</script></body></html>
