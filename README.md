@@ -1,6 +1,6 @@
 # PyTorch 从里到外
 
-**在线阅读：<https://wikieden.github.io/pytorch-inside-out/>** · [讲义目录](https://wikieden.github.io/pytorch-inside-out/lessons/index.html) · [全部动画](https://wikieden.github.io/pytorch-inside-out/animations/index.html) · [复习卡片](https://wikieden.github.io/pytorch-inside-out/review.html)
+**在线阅读：<https://wikieden.github.io/pytorch-inside-out/>** · [讲义目录](https://wikieden.github.io/pytorch-inside-out/lessons/index.html) · [全部动画](https://wikieden.github.io/pytorch-inside-out/animations/index.html) · [复习卡片](https://wikieden.github.io/pytorch-inside-out/review.html) · [全部讲义书](https://wikieden.github.io/ai-books/)
 
 > 36 章 · 36 个动画（GIF + 可交互页面）· 135 张复习卡片 · 36 个代码模块和 notebook，数字都在本机 torch 2.15.0 上跑过 · 覆盖 study-plan 阶段 A–F 的全部讲义章节
 

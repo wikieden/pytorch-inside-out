@@ -52,4 +52,5 @@ function next(){const S=sched(overlap);if(t<S.end){t=Math.min(S.end,t+4);draw();
 $('tm').onclick=()=>{ANIM.stop();auto=false;overlap=!overlap;t=sched(overlap).end;draw()};
 $('nb').oninput=e=>{ANIM.stop();auto=false;NB=+e.target.value;t=sched(overlap).end;draw()};
 setupPlayer({captureSeed:1,reset,next},250);
-</script></body></html>
+</script><a href="https://wikieden.github.io/ai-books/" style="position:fixed;right:12px;bottom:12px;z-index:99;padding:4px 10px;border-radius:14px;background:rgba(127,127,127,.18);color:inherit;font:13px/1.6 system-ui,sans-serif;text-decoration:none">← 全部讲义书</a>
+</body></html>
