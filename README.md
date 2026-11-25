@@ -85,6 +85,17 @@
 | [35](https://wikieden.github.io/pytorch-inside-out/lessons/35-quant-export.html) | 量化与导出：模型变小、脱离 Python 部署 | 对称量化；weight-only；torch.export + AOTInductor | [▶](https://wikieden.github.io/pytorch-inside-out/animations/35-quantize.html) | P128–P131 | 已写，练习待作答 |
 | [36](https://wikieden.github.io/pytorch-inside-out/lessons/36-bench-correctness.html) | benchmark 与正确性：测准、对齐、再上线 | 测准时间、有效带宽、assert_close 容差、测试矩阵 | [▶](https://wikieden.github.io/pytorch-inside-out/animations/36-bench.html) | P132–P135 | 已写，练习待作答 |
 
+## 联系与合作
+
+欢迎来信：<wikieden@gmail.com>。可以合作的方向：
+
+- 讲义勘误与建议
+- 课程 / 企业内训
+- 内容合作与转载授权
+- 赞助本系列持续更新
+
+赞助请发邮件联系。
+
 ---
 
 本仓库由私有学习仓库里的脚本 `tools/publish-transformer/build.py` 自动生成，内容摘自讲义目录，不要直接修改这里的文件。
